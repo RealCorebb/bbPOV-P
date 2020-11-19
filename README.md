@@ -1,5 +1,6 @@
 # bbPOV-V3
 A new milestone?  
+![image](https://github.com/RealCorebb/bbPOV-V3/blob/main/IMG/logo.jpg)  
 已有能用的，不过存不了多少数据，仓库地址：https://github.com/RealCorebb/bbPOV-V2  
 需要完成的事情：  
 1.更高密度的LED （自制PCB可解决，正在尝试）  
