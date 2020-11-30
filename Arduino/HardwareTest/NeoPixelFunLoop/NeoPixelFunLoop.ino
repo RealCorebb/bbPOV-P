@@ -24,11 +24,11 @@ AsyncWebServer server(80);
 
 const uint16_t PixelCount = 32; // make sure to set this to the number of pixels in your strip
 const uint16_t PixelPin = 2;  // make sure to set this to the correct pin, ignored for Esp8266
-const uint16_t AnimCount = PixelCount / 5 * 2 + 1; // we only need enough animations for the tail and one extra
+const uint16_t AnimCount = PixelCount / 4 * 2 + 1; // we only need enough animations for the tail and one extra
 
-const uint16_t PixelFadeDuration = 300; // third of a second
+const uint16_t PixelFadeDuration = 200; // third of a second
 // one second divide by the number of pixels = loop once a second
-const uint16_t NextPixelMoveDuration = 1000 / PixelCount; // how fast we move through the pixels
+const uint16_t NextPixelMoveDuration = 500 / PixelCount; // how fast we move through the pixels
 
 NeoGamma<NeoGammaTableMethod> colorGamma;
 NeoPixelBus<DotStarBgrFeature, DotStarSpiMethod> strip2(PixelCount);
