@@ -13,7 +13,7 @@ NUMPIXELS = 80 #单边LED数量
 Div = 240 #1圈分割数
  
 
-gif_file_name = "apple.gif"
+gif_file_name = "magic.gif"
 im = Image.open(gif_file_name)
 print(im.is_animated)
 print(im.n_frames)
@@ -62,7 +62,7 @@ def polarConv(imgOrgin, frame):
 
     
     
-for i in range(Frame-1):
+for i in range(Frame):
     #输出每一帧
     frame = im.convert('RGBA') #如果是RGB的话，有的透明背景GIF不兼容
     polarConv(frame, i)
