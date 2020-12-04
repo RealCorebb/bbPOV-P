@@ -1,0 +1,21 @@
+# serverless.yml
+
+component: flask
+name: flashDemo
+org: orgDemo
+app: appDemo
+stage: dev
+
+inputs:
+  src:
+    hook: 'pip -V'
+    dist: ./
+    exclude:
+      - .env
+  region: ap-guangzhou
+  runtime: Python3.6
+  apigatewayConf:
+    protocols:
+      - http
+      - https
+    environment: release

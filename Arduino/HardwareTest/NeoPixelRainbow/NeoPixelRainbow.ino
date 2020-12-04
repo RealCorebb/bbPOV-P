@@ -3,6 +3,7 @@
 #include <ESPAsyncWebServer.h>
 #include <AsyncElegantOTA.h>
 #include <NeoPixelBrightnessBus.h>
+#include <ESPmDNS.h>
 AsyncWebServer server(80);
 const uint16_t PixelCount = 32;
 
@@ -15,6 +16,8 @@ void setup()
      Serial.begin(115200);
      WiFi.mode(WIFI_AP);
      WiFi.softAP("bbPOV-P");
+      MDNS.begin("bbclock");
+      MDNS.addService("bbclock", "tcp", 80);
      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(200, "text/plain", "Hi! I am ESP32.");
     });
