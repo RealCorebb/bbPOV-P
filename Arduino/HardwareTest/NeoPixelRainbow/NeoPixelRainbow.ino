@@ -6,8 +6,8 @@
 #include <ESPmDNS.h>
 AsyncWebServer server(80);
 const uint16_t PixelCount = 32;
-
-NeoPixelBrightnessBus<DotStarBgrFeature, DotStarSpiMethod> strip2(PixelCount);
+#include "SD_MMC.h"
+NeoPixelBrightnessBus<DotStarBgrFeature, DotStarSpiMethod2> strip2(PixelCount);
 NeoPixelBrightnessBus<DotStarBgrFeature, DotStarSpiMethod> strip(PixelCount);
 RgbColor color;
 uint8_t pos;
@@ -25,11 +25,15 @@ void setup()
     server.begin();
     Serial.println("HTTP server started");
     // this resets all the neopixels to an off state
+    if(!SD_MMC.begin("/sdcard",true)){
+        Serial.println("Card Mount Failed");
+       // return;
+    }
     strip.Begin();
-    strip.SetBrightness(20);
+    strip.SetBrightness(16);
     strip.Show();
     strip2.Begin(32,25,33,26);
-    strip2.SetBrightness(20);
+    strip2.SetBrightness(16);
     strip2.Show();
 }
 int Rainbowperiod = 5;
@@ -53,6 +57,7 @@ void loop() {
         strip.SetPixelColor(i, color);
         strip2.SetPixelColor(i, color);
       }
+      
       strip.Show();
       strip2.Show();
     }

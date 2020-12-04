@@ -9,54 +9,63 @@
 // running this with a smaller string may not look as interesting.  Try providing
 // your own 24 bit bitmap for better results.
 
-#include <NeoPixelBus.h>
+#include <NeoPixelBrightnessBus.h>
 #include <NeoPixelAnimator.h>
 #include <SPI.h> 
 #include <FS.h>
-#include <LittleFS.h> 
+#include "SD_MMC.h"
 
+const uint16_t PixelCount = 32;
+#include "SD_MMC.h"
+NeoPixelBrightnessBus<DotStarBgrFeature, DotStarSpiMethod2> strip2(PixelCount);
+NeoPixelBrightnessBus<DotStarBgrFeature, DotStarSpiMethod> strip(PixelCount);
 
-const uint16_t PixelCount = 8; // the sample images are meant for 144 pixels
-const uint16_t PixelPin = 3;
-const uint16_t AnimCount = 1; // we only need one
-int i = 0;
-NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(PixelCount, PixelPin);
-NeoBitmapFile<NeoGrbFeature, File> image;
+NeoBitmapFile<DotStarBgrFeature, File> image;
 File bitmapFile;
 
 void setup() {
+    pinMode(2, INPUT_PULLUP);
+    delay(3000);
     Serial.begin(115200);
-    while (!Serial); // wait for serial attach
-
-    strip.Begin();
-    strip.Show();
-
-    Serial.print("Initializing SD card...");
-
-    // see if the card is present and can be initialized:
-    if (!LittleFS.begin())
-    {
-        Serial.println("Card failed, or not present");
-        // don't do anything more:
+    if(!SD_MMC.begin("/sdcard",true)){
+        Serial.println("Card Mount Failed");
         return;
     }
-    Serial.println("card initialized.");
-
+    strip.Begin();
+    strip.SetBrightness(10);
+    strip.Show();
+    strip2.Begin(32,25,33,26);
+    strip2.SetBrightness(10);
+    strip2.Show();
     // open the file
-    bitmapFile = LittleFS.open("/1.bmp", "r"); 
+    bitmapFile = SD_MMC.open("/1.bmp", "r"); 
     image.Begin(bitmapFile);
+    image.Blt(strip, 0, 1, 1, 32);
+    strip.SetBrightness(1);
+    strip.Show();
+    image.Blt(strip2, 0, 1, 280, 32);
+    strip2.SetBrightness(10);
+    strip2.Show();
+    Serial.println(millis());
+
 
 }
 
 void loop() {
-    //if (i<=image.Height()) i++;
-    //else i=0;
-    //image.Blt(strip, 0, 0, i, image.Width());
-    //strip.Show();
-    bitmapFile = LittleFS.open("/1.bmp", "r"); 
+    /*
+    bitmapFile = SD_MMC.open("/1.bmp", "r"); 
     image.Begin(bitmapFile);
+    image.Blt(strip, 0, 1, 1, 32);
+    strip.Show();
+    image.Blt(strip2, 0, 1, 280, 32);
+    strip2.Show();
     Serial.println(millis());
-    bitmapFile = LittleFS.open("/2.bmp", "r"); 
+    bitmapFile = SD_MMC.open("/2.bmp", "r"); 
     image.Begin(bitmapFile);
+    image.Blt(strip, 0, 0, 1, 32);
+    strip.Show();
+    image.Blt(strip2, 0, 1, 280, 32);
+    strip2.Show();
     Serial.println(millis());
+    */
 }
