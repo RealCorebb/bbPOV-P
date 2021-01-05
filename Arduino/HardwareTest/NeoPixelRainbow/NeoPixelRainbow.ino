@@ -5,14 +5,37 @@
 #include <NeoPixelBrightnessBus.h>
 #include <ESPmDNS.h>
 AsyncWebServer server(80);
-const uint16_t PixelCount = 32;
+const uint16_t PixelCount = 80;
 #include "SD_MMC.h"
 NeoPixelBrightnessBus<DotStarBgrFeature, DotStarSpiMethod2> strip2(PixelCount);
 NeoPixelBrightnessBus<DotStarBgrFeature, DotStarSpiMethod> strip(PixelCount);
 RgbColor color;
 uint8_t pos;
+AsyncWebSocket ws("/ws");
+
+void IRAM_ATTR RotCount1(){
+  static unsigned long last_interrupt_time = 0;
+  unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
+    if (interrupt_time - last_interrupt_time > 20)
+    {
+    Serial.println("RotCount1");
+    }
+    last_interrupt_time = interrupt_time;
+  }
+void IRAM_ATTR RotCount2(){
+  static unsigned long last_interrupt_time = 0;
+  unsigned long interrupt_time = millis();
+    if (interrupt_time - last_interrupt_time > 20)
+    {
+    Serial.println("RotCount2");
+    }
+    last_interrupt_time = interrupt_time;
+  }
+
 void setup()
 {
+     pinMode(34,INPUT);
+     pinMode(35,INPUT);
      Serial.begin(115200);
      WiFi.mode(WIFI_AP);
      WiFi.softAP("bbPOV-P");
@@ -22,19 +45,23 @@ void setup()
       request->send(200, "text/plain", "Hi! I am ESP32.");
     });
     AsyncElegantOTA.begin(&server);    // Start ElegantOTA
-    server.begin();
-    Serial.println("HTTP server started");
-    // this resets all the neopixels to an off state
-    if(!SD_MMC.begin("/sdcard",true)){
+    if(!SD_MMC.begin("/sdcard")){
         Serial.println("Card Mount Failed");
        // return;
     }
+    server.serveStatic("/", SD_MMC, "/");
+    server.begin();
+    Serial.println("HTTP server started");
     strip.Begin();
-    strip.SetBrightness(16);
+    strip.SetBrightness(80);
     strip.Show();
     strip2.Begin(32,25,33,26);
-    strip2.SetBrightness(16);
+    strip2.SetBrightness(80);
     strip2.Show();
+    Serial.println("Setup Done");
+
+    attachInterrupt(34, RotCount1, FALLING );
+    attachInterrupt(35, RotCount2, FALLING );
 }
 int Rainbowperiod = 5;
 unsigned long Rainbowtime_now = 0;
