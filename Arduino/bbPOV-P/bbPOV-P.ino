@@ -20,6 +20,7 @@ uint32_t Div = 360;
 JPEGDEC jpeg;
 File myfile;
 uint16_t (*imgBuffer)[PixelCount];
+uint16_t (*imgBuffer2)[PixelCount];
 AsyncWebServer server(80);
 int numRot= 0;
 int numDiv = 0;
@@ -58,6 +59,10 @@ void setup()
      pinMode(34,INPUT);
      pinMode(35,INPUT);
      Serial.begin(115200);
+     if(imgBuffer = (uint16_t(*)[PixelCount]) calloc(PixelCount*Div,sizeof(uint16_t)))
+      Serial.println("Alloc memory1 OK");
+     if(imgBuffer2 = (uint16_t(*)[PixelCount]) calloc(PixelCount*Div,sizeof(uint16_t)))
+      Serial.println("Alloc memory2 OK");      
      WiFi.mode(WIFI_AP);
      WiFi.softAP("bbPOV-P");
       MDNS.begin("bbPOV");
@@ -83,10 +88,7 @@ void setup()
 
     
    
-  long lTime;
-  if(imgBuffer = (uint16_t(*)[PixelCount]) calloc(PixelCount*Div,sizeof(uint16_t)))
-    Serial.println("Alloc memory1 OK");
-  
+  long lTime; 
   if (jpeg.open("/sb.jpg", myOpen, myClose, myRead, mySeek, JPEGDraw))
   {
     Serial.println("Successfully opened JPEG image");
@@ -102,6 +104,8 @@ void setup()
     }
     jpeg.close();
   }
+  Serial.printf("\n\navailable heap in main %i\n", ESP.getFreeHeap());
+  Serial.printf("biggest free block: %i\n\”", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 }
 void loop() {
     AsyncElegantOTA.loop(); 

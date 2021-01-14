@@ -19,9 +19,10 @@ int32_t mySeek(JPEGFILE *handle, int32_t position) {
   if (!myfile) return 0;
   return myfile.seek(position);
 }
-uint16_t imgBuffer[360][80];
+uint16_t (*imgBuffer)[80];
 // Function to draw pixels to the display
 int JPEGDraw(JPEGDRAW *pDraw) {
+
   Serial.printf("jpeg draw: x,y=%d,%d, cx,cy = %d,%d\n",pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
   //Serial.printf("Before Pixel 80 = 0x%04x\n", pDraw->pPixels[80]);
   int pixels=pDraw->iWidth*pDraw->iHeight;
@@ -30,7 +31,7 @@ int JPEGDraw(JPEGDRAW *pDraw) {
   }
   else{
     memcpy(&imgBuffer[pDraw->y][pDraw->x],pDraw->pPixels,sizeof(uint16_t)*pixels);
-    Serial.println(ESP.getFreeHeap());
+   // Serial.println(ESP.getFreeHeap());
   }
   return 1;
 }
@@ -39,6 +40,8 @@ void setup()
 {
   pinMode(2, INPUT_PULLUP);
   Serial.begin(115200);
+  if(imgBuffer = (uint16_t(*)[80]) calloc(80*360,sizeof(uint16_t)))
+    Serial.println("Alloc memory1 OK");
 if(!SD_MMC.begin("/sdcard",true)){
         Serial.println("Card Mount Failed");
     }
@@ -46,6 +49,7 @@ if(!SD_MMC.begin("/sdcard",true)){
 } /* setup() */
 void loop() {
 long lTime;
+
   if (jpeg.open("/sb.jpg", myOpen, myClose, myRead, mySeek, JPEGDraw))
   {
     Serial.println("Successfully opened JPEG image");
@@ -62,11 +66,7 @@ long lTime;
     jpeg.close();
   }
   Serial.printf("After Pixel 80 = 0x%04x\n", imgBuffer[160][50]);
-  uint8_t b = uint8_t((imgBuffer[160][50] & 0x001F)<<3); // 5 LSB for blue
-  uint8_t g = uint8_t((imgBuffer[160][50] & 0x07C0)>>3); // 6 'middle' bits for green
-  uint8_t r = uint8_t((imgBuffer[160][50] & 0xF800)>>8); // 5 MSB for red
-  Serial.println(r);
-  Serial.println(g);
-  Serial.println(b);
+  Serial.printf("\n\navailable heap in main %i\n", ESP.getFreeHeap());
+  Serial.printf("biggest free block: %i\n\”", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
   delay(10000);
 }
