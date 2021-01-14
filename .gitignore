@@ -1,3 +1,11 @@
 
 API/Serverless/.env
 Arduino/HardwareTest/NeoPixelRainbow/NeoPixelRainbow.ino.esp32.bin
+*.jpg
+*.bmp
+*.gif
+*.bmp
+*.bmp
+*.png
+API/magic.gif
+*.bin

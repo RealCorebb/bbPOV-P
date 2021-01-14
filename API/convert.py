@@ -10,10 +10,11 @@ from PIL import Image
 #配置
 #Frame = 5 #指定帧数量
 NUMPIXELS = 80 #单边LED数量
-Div = 240 #1圈分割数
- 
+Div = 360 #1圈分割数
+Bright = 30 #輝度
+Led0Bright = 15 #中心LEDの輝度 [%]
 
-gif_file_name = "magic.gif"
+gif_file_name = "giphy.gif"
 im = Image.open(gif_file_name)
 print(im.is_animated)
 print(im.n_frames)
@@ -46,17 +47,15 @@ def polarConv(imgOrgin, frame):
     for j in range(0, Div):
         for i in range(0, hC+1):
             #座標色取得
-            rP = imgArray[hC + math.ceil(i * math.cos(2*math.pi/Div*j)),
-                         wC - math.ceil(i * math.sin(2*math.pi/Div*j)), 0]
-                     
-            gP = imgArray[hC + math.ceil(i * math.cos(2*math.pi/Div*j)),
-                         wC - math.ceil(i * math.sin(2*math.pi/Div*j)), 1]
-                     
-            bP = imgArray[hC + math.ceil(i * math.cos(2*math.pi/Div*j)),
-                         wC - math.ceil(i * math.sin(2*math.pi/Div*j)), 2]
+            rP = int(imgArray[hC + math.ceil(i * math.cos(2*math.pi/Div*j)),
+                         wC - math.ceil(i * math.sin(2*math.pi/Div*j)), 0] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100)
+            gP = int(imgArray[hC + math.ceil(i * math.cos(2*math.pi/Div*j)),
+                         wC - math.ceil(i * math.sin(2*math.pi/Div*j)), 1] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100)
+            bP = int(imgArray[hC + math.ceil(i * math.cos(2*math.pi/Div*j)),
+                         wC - math.ceil(i * math.sin(2*math.pi/Div*j)), 2] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100)
             imgPolar.putpixel((i,j), (rP, gP, bP))
 
-    imgPolar.save(str(frame)+'.bmp') #输出极坐标变换后的图像
+    imgPolar.save(str(frame)+'.jpg',quality=80, optimize=True) #输出极坐标变换后的图像
             
  
 

@@ -14,7 +14,7 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncElegantOTA.h>
-
+#include "SD_MMC.h"
 
 AsyncWebServer server(80);
 
@@ -132,6 +132,11 @@ void setup()
   });
 
   AsyncElegantOTA.begin(&server);    // Start ElegantOTA
+  if(!SD_MMC.begin("/sdcard")){
+        Serial.println("Card Mount Failed");
+       // return;
+    }
+  server.serveStatic("/", SD_MMC, "/");
   server.begin();
   Serial.println("HTTP server started");
     strip2.Begin(32,25,33,26);
