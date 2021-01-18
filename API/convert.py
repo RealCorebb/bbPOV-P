@@ -11,10 +11,10 @@ from PIL import Image
 #Frame = 5 #指定帧数量
 NUMPIXELS = 80 #单边LED数量
 Div = 360 #1圈分割数
-Bright = 30 #輝度
-Led0Bright = 15 #中心LEDの輝度 [%]
+Bright = 50 #輝度
+Led0Bright = 50 #中心LEDの輝度 [%]
 
-gif_file_name = "giphy.gif"
+gif_file_name = "cat.gif"
 im = Image.open(gif_file_name)
 print(im.is_animated)
 print(im.n_frames)

@@ -13,7 +13,7 @@ import cv2
 #配置
 #Frame = 5 #指定帧数量
 NUMPIXELS = 80 #单边LED数量
-Div = 240 #1圈分割数
+Div = 360 #1圈分割数
 Bright = 100 #輝度
 Led0Bright = 3 #中心LEDの輝度 [%]
 i = 0
@@ -26,11 +26,10 @@ def polarConv(imgOrgin, frame):
     h = imgOrgin.height #帧尺寸
     w = imgOrgin.width
     #画像縮小
-    imgRedu = imgOrgin.resize((math.floor((NUMPIXELS * 2 -1)/h *w), NUMPIXELS * 2 -1))
-    imgRedu = cv2.cvtColor(np.array(imgRedu), cv2.COLOR_BGR2GRAY)
-    value = np.sqrt(((imgRedu.shape[0]/2.0)**2.0)+((imgRedu.shape[1]/2.0)**2.0))
-    polar_image = cv2.linearPolar(imgRedu,(imgRedu.shape[0]/2, imgRedu.shape[1]/2), value, cv2.WARP_FILL_OUTLIERS)
-    cv2.imwrite('sb.bmp',polar_image)
+   # imgRedu = imgOrgin.resize((math.floor((NUMPIXELS * 2 -1)/h *w), NUMPIXELS * 2 -1))
+   # imgRedu = cv2.cvtColor(np.array(imgRedu), cv2.COLOR_BGR2GRAY)
+    #polar_image = cv2.warpPolar(imgRedu,(NUMPIXELS , Div ), (w/2,h/2) ,min(h, w) / 2, 0)
+    #cv2.imwrite('sb.jpg',polar_image)
     dateTimeObj = datetime.now()
     print(dateTimeObj)        
  

@@ -19,8 +19,7 @@ uint32_t Div = 360;
 //一些机制需要用到的全局变量
 JPEGDEC jpeg;
 File myfile;
-uint16_t (*imgBuffer)[PixelCount];
-uint16_t (*imgBuffer2)[PixelCount];
+NeoBuffer <NeoBufferMethod<DotStarBgrFeature>> *imagebuffer;
 AsyncWebServer server(80);
 int numRot= 0;
 int numDiv = 0;
@@ -59,10 +58,8 @@ void setup()
      pinMode(34,INPUT);
      pinMode(35,INPUT);
      Serial.begin(115200);
-     if(imgBuffer = (uint16_t(*)[PixelCount]) calloc(PixelCount*Div,sizeof(uint16_t)))
-      Serial.println("Alloc memory1 OK");
-     if(imgBuffer2 = (uint16_t(*)[PixelCount]) calloc(PixelCount*Div,sizeof(uint16_t)))
-      Serial.println("Alloc memory2 OK");      
+     NeoBuffer <NeoBufferMethod<DotStarBgrFeature>> imagebufferint(80, 360, NULL);
+     imagebuffer = &imagebufferint; 
      WiFi.mode(WIFI_AP);
      WiFi.softAP("bbPOV-P");
       MDNS.begin("bbPOV");
@@ -71,7 +68,7 @@ void setup()
       request->send(200, "text/plain", "Hi! I am bbPOV-P.");
     });
     AsyncElegantOTA.begin(&server);    // Start ElegantOTA
-    if(!SD_MMC.begin("/sdcard")){
+    if(!SD_MMC.begin("/sdcard"),true){
         Serial.println("Card Mount Failed");
     }
     server.serveStatic("/", SD_MMC, "/");
@@ -118,8 +115,9 @@ void loop() {
             case 0:
               strip.ClearTo(black);
               for(int i = 0; i < PixelCount; i++){
-               strip.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv][i] & 0x001F)<<3)));
-               strip2.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x001F)<<3)));
+                imagebuffer->Blt(strip,0,0,0,80);
+             //  strip.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv][i] & 0x001F)<<3)));
+             //  strip2.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x001F)<<3)));
               }
               strip.Show();  
               strip2.Show();  
@@ -127,8 +125,8 @@ void loop() {
             case 1:
               strip.ClearTo(black);
               for(int i = 0; i < PixelCount; i++){
-               strip2.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv][i] & 0x001F)<<3)));
-               strip.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x001F)<<3)));
+             //  strip2.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv][i] & 0x001F)<<3)));
+              // strip.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x001F)<<3)));
               }
               strip2.Show();  
               strip.Show();  
@@ -159,11 +157,15 @@ int32_t mySeek(JPEGFILE *handle, int32_t position) {
 }
 
 int JPEGDraw(JPEGDRAW *pDraw) {
- // Serial.printf("jpeg draw: x,y=%d,%d, cx,cy = %d,%d\n",pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
+
+  //Serial.printf("jpeg draw: x,y=%d,%d, cx,cy = %d,%d\n",pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
+  //Serial.printf("Before Pixel 80 = 0x%04x\n", pDraw->pPixels[80]);
   int pixels=pDraw->iWidth*pDraw->iHeight;
-  if(pDraw->x+pDraw->y*PixelCount+pixels>=Div*PixelCount){
-   pixels=pDraw->x+pDraw->y*PixelCount+pixels-Div*PixelCount;
-  }
-    memcpy(&imgBuffer[pDraw->y][pDraw->x],pDraw->pPixels,sizeof(uint16_t)*pixels);
+  for (int i = 0 ;i<=pixels;i++){
+      uint8_t b = uint8_t((pDraw->pPixels[i] & 0x001F)<<3); // 5 LSB for blue
+      uint8_t g = uint8_t((pDraw->pPixels[i] & 0x07C0)>>3); // 6 'middle' bits for green
+      uint8_t r = uint8_t((pDraw->pPixels[i] & 0xF800)>>8); // 5 MSB for red
+      imagebuffer->SetPixelColor(pDraw->x+i%80,pDraw->y+i/80,RgbColor(r,g,b));
+    }
   return 1;
 }
