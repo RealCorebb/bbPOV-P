@@ -1,12 +1,7 @@
 #include "SD_MMC.h"
 #include "JPEGDEC.h"
-#include <NeoPixelBus.h>
 JPEGDEC jpeg;
 File myfile;
-
-NeoBuffer <NeoBufferMethod<DotStarBgrFeature>> *imagebuffer;
-NeoBuffer <NeoBufferMethod<DotStarBgrFeature>> *imagebuffer2;
-
 void * myOpen(const char *filename, int32_t *size) {
   Serial.println("Open");
   myfile = SD_MMC.open(filename);
@@ -24,20 +19,21 @@ int32_t mySeek(JPEGFILE *handle, int32_t position) {
   if (!myfile) return 0;
   return myfile.seek(position);
 }
-//uint16_t (*imgBuffer)[80];
+uint32_t (*imgBuffer)[80];
+uint32_t (*imgBuffer2)[80];
 // Function to draw pixels to the display
 int JPEGDraw(JPEGDRAW *pDraw) {
 
-  //Serial.printf("jpeg draw: x,y=%d,%d, cx,cy = %d,%d\n",pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
+  Serial.printf("jpeg draw: x,y=%d,%d, cx,cy = %d,%d\n",pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
   //Serial.printf("Before Pixel 80 = 0x%04x\n", pDraw->pPixels[80]);
   int pixels=pDraw->iWidth*pDraw->iHeight;
-  for (int i = 0 ;i<=pixels;i++){
-      uint8_t b = uint8_t((pDraw->pPixels[i] & 0x001F)<<3); // 5 LSB for blue
-      uint8_t g = uint8_t((pDraw->pPixels[i] & 0x07C0)>>3); // 6 'middle' bits for green
-      uint8_t r = uint8_t((pDraw->pPixels[i] & 0xF800)>>8); // 5 MSB for red
-      imagebuffer->SetPixelColor(pDraw->x+i%80,pDraw->y+i/80,RgbColor(r,g,b));
-      imagebuffer2->SetPixelColor(pDraw->x+i%80,pDraw->y+i/80,RgbColor(r,g,b));
-    }
+  if(pDraw->x+pDraw->y*80+pixels>=360*80){
+   pixels=pDraw->x+pDraw->y*80+pixels-360*80;
+  }
+  else{
+    memcpy(&imgBuffer[pDraw->y][pDraw->x],pDraw->pPixels,sizeof(uint16_t)*pixels);
+   // Serial.println(ESP.getFreeHeap());
+  }
   return 1;
 }
 
@@ -45,19 +41,22 @@ void setup()
 {
   pinMode(2, INPUT_PULLUP);
   Serial.begin(115200);
-  //if(imgBuffer = (uint16_t(*)[80]) calloc(80*360,sizeof(uint16_t)))
-  //  Serial.println("Alloc memory1 OK");
-  NeoBuffer <NeoBufferMethod<DotStarBgrFeature>> imagesb(80, 350, NULL);
-  imagebuffer = &imagesb;
-  NeoBuffer <NeoBufferMethod<DotStarBgrFeature>> imagesb2(80, 350, NULL);
-  imagebuffer2 = &imagesb2;
+  if(imgBuffer = (uint32_t(*)[80]) calloc(80*360,sizeof(uint32_t)))
+    Serial.println("Alloc memory1 OK");
+  else
+    Serial.println("FUC KXJP");
+  if(imgBuffer2 = (uint32_t(*)[80]) calloc(80*360,sizeof(uint32_t)))
+    Serial.println("Alloc memory2 OK");
+  else
+    Serial.println("FUC KPLY");
 if(!SD_MMC.begin("/sdcard",true)){
         Serial.println("Card Mount Failed");
     }
     Serial.println("setup done");
 } /* setup() */
 void loop() {
-  long lTime;
+  /*
+long lTime;
 
   if (jpeg.open("/sb.jpg", myOpen, myClose, myRead, mySeek, JPEGDraw))
   {
@@ -74,10 +73,9 @@ void loop() {
     }
     jpeg.close();
   }
- // Serial.printf("After Pixel 80 = 0x%02x\n", imgBuffer[160][50]);
-  Serial.printf("R:0x%02x G:0x%02x B:0x%02x\n", imagebuffer->GetPixelColor(50,150).R,imagebuffer->GetPixelColor(50,150).G,imagebuffer->GetPixelColor(50,150).B);
-  //Serial.printf(imagebuffer->GetPixelColor(160,50).R);
+  Serial.printf("After Pixel 80 = 0x%04x\n", imgBuffer[160][50]);
   Serial.printf("\n\navailable heap in main %i\n", ESP.getFreeHeap());
   Serial.printf("biggest free block: %i\n\”", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+  */
   delay(10000);
 }
