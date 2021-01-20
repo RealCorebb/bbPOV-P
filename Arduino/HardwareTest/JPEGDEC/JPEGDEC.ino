@@ -19,8 +19,8 @@ int32_t mySeek(JPEGFILE *handle, int32_t position) {
   if (!myfile) return 0;
   return myfile.seek(position);
 }
-uint32_t (*imgBuffer)[80];
-uint32_t (*imgBuffer2)[80];
+uint16_t (*imgBuffer)[80];
+uint16_t (*imgBuffer2)[80];
 // Function to draw pixels to the display
 int JPEGDraw(JPEGDRAW *pDraw) {
 
@@ -41,11 +41,11 @@ void setup()
 {
   pinMode(2, INPUT_PULLUP);
   Serial.begin(115200);
-  if(imgBuffer = (uint32_t(*)[80]) calloc(80*360,sizeof(uint32_t)))
+  if(imgBuffer = (uint16_t(*)[80]) calloc(80*360,sizeof(uint16_t)))
     Serial.println("Alloc memory1 OK");
   else
     Serial.println("FUC KXJP");
-  if(imgBuffer2 = (uint32_t(*)[80]) calloc(80*360,sizeof(uint32_t)))
+  if(imgBuffer2 = (uint16_t(*)[80]) calloc(80*360,sizeof(uint16_t)))
     Serial.println("Alloc memory2 OK");
   else
     Serial.println("FUC KPLY");
@@ -55,7 +55,7 @@ if(!SD_MMC.begin("/sdcard",true)){
     Serial.println("setup done");
 } /* setup() */
 void loop() {
-  /*
+  
 long lTime;
 
   if (jpeg.open("/sb.jpg", myOpen, myClose, myRead, mySeek, JPEGDraw))
@@ -76,6 +76,6 @@ long lTime;
   Serial.printf("After Pixel 80 = 0x%04x\n", imgBuffer[160][50]);
   Serial.printf("\n\navailable heap in main %i\n", ESP.getFreeHeap());
   Serial.printf("biggest free block: %i\n\”", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-  */
+  
   delay(10000);
 }

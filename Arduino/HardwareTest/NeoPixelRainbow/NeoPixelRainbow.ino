@@ -61,7 +61,7 @@ void setup()
   server.begin();
   Serial.println("HTTP server started");
   strip.Begin();
-  strip.SetBrightness(88);
+  strip.SetBrightness(16);
   strip.Show();
   strip2.Begin(32, 25, 33, 26);
   strip2.SetBrightness(88);

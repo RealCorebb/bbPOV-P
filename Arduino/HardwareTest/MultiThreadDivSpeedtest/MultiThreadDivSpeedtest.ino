@@ -15,7 +15,7 @@
 #define LedStripCount 2  //LED条数
 uint32_t Frame = 0;
 byte Hall = 0;  //到达顶端的霍尔传感器代号
-uint32_t Div = 320;
+uint32_t Div = 360;
 
 
 //一些机制需要用到的全局变量
@@ -52,15 +52,12 @@ void RotCountCommon(){
     }
    last_interrupt_time = interrupt_time;
   }
-  
+TaskHandle_t loop1Handle,loop2Handle,loopSetledHandle;  
 void setup()
 {
      pinMode(34,INPUT);
-     pinMode(35,INPUT); 
+     pinMode(35,INPUT);
      Serial.begin(115200);
-     if(!SD_MMC.begin("/sdcard")){
-        Serial.println("Card Mount Failed");
-    }   
      WiFi.mode(WIFI_AP);
      WiFi.softAP("bbPOV-P");
       MDNS.begin("bbPOV");
@@ -69,7 +66,9 @@ void setup()
       request->send(200, "text/plain", "Hi! I am bbPOV-P.");
     });
     AsyncElegantOTA.begin(&server);    // Start ElegantOTA
-    
+    if(!SD_MMC.begin("/sdcard")){
+        Serial.println("Card Mount Failed");
+    }
     server.serveStatic("/", SD_MMC, "/");
     server.begin();
     Serial.println("HTTP server started");
@@ -77,48 +76,74 @@ void setup()
     strip.Show();
     strip2.Begin(32,25,33,26);
     strip2.Show();
+
+
+    RgbColor Divcolor (0,20,0);
+              for(int i = 0; i < PixelCount; i++){
+                strip.SetPixelColor(i, Divcolor);
+                strip2.SetPixelColor(i, Divcolor);
+              }
     //stripA.begin(); // Initialize pins for output
     //stripA.show();  // Turn all LEDs off ASAP
 //    FastLED.addLeds<APA102,23,18,BGR,DATA_RATE_MHZ(30)>(leds, PixelCount);
   //  FastLED.show();
     hallHit.attach(0.033,RotCountCommon);
+
+
+    Serial.println("Setup Done");
     
-    Serial.println("Setup Done");   
+    
+    
+  xTaskCreatePinnedToCore(
+    loop1
+    ,  "loop1"   // A name just for humans
+    ,  5000  // This stack size can be checked & adjusted by reading the Stack Highwater
+    ,  NULL
+    ,  20  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    ,  &loop1Handle 
+    ,  0);
 
-
-    xTaskCreatePinnedToCore(
-    ledloop
-    ,  "ledloop"
+  xTaskCreatePinnedToCore(
+    loop2
+    ,  "loop2"
     ,  5000  // Stack size
     ,  NULL
-    ,  5 // Priority
-    ,  NULL 
-    ,  0);       
-}
-void loop() { 
-   // AsyncElegantOTA.loop(); 
+    ,  20  // Priority
+    ,  &loop2Handle 
+    ,  0);
+
+  xTaskCreatePinnedToCore(
+    loopSetled
+    ,  "loopSetled"
+    ,  10000  // Stack size
+    ,  NULL
+    ,  20  // Priority
+    ,  &loopSetledHandle
+    ,  1);
+         
 }
 
-void ledloop(void *pvParameters)
-{
+void loop() {
+    //AsyncElegantOTA.loop(); 
+   //Serial.println("mainloop");        
+}
+void loopSetled(void *pvParameters){
   for (;;)
   {
     TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
-    TIMERG0.wdt_feed=1;
-    TIMERG0.wdt_wprotect=0;
-        if(stateDiv == 1 && micros() - timeOld > (rotTime / (Div/LedStripCount)) * (numDiv)){
+  TIMERG0.wdt_feed=1;
+  TIMERG0.wdt_wprotect=0;
+      if(stateDiv == 1 && micros() - timeOld > (rotTime / (Div/LedStripCount)) * (numDiv)){
         stateDiv = 0;
       }
       if(stateDiv == 0 && micros() - timeOld < (rotTime / (Div/LedStripCount)) * (numDiv + 1 )){
-        long stripshowtime=micros();
         stateDiv = 1;
       //  long donetime=micros();
        // switch(Hall){
         //    case 0:
               strip.ClearTo(black);
               strip2.ClearTo(black);
-             // long nowtime=micros();
-             RgbColor Divcolor (0,0,0);
+              RgbColor Divcolor (0,0,0);
               if(numDiv%3==0)
                    // CHOU = CRGB::Red;
                    Divcolor.R=16;
@@ -128,16 +153,23 @@ void ledloop(void *pvParameters)
               if(numDiv%3==2)
                    // CHOU = CRGB::Blue;
                    Divcolor.B=16;
+             // long nowtime=micros();
               for(int i = 0; i < PixelCount; i++){
                 strip.SetPixelColor(i, Divcolor);
                 strip2.SetPixelColor(i, Divcolor);
-                }
+              }
              // Serial.printf("FUcking setpixel tiime:%d",int(micros()-nowtime));
               //  FastLED.show(); 
-              
-              strip.Show();
-              strip2.Show();  
-              
+           //  stripshowtime=micros();
+              //strip.Show();       
+              //strip2.Show();  
+              xTaskNotifyGive( loop1Handle );
+              xTaskNotifyGive( loop2Handle );
+
+              //ulTaskNotifyTake( pdTRUE, portMAX_DELAY );    
+            //  ulTaskNotifyTake( pdTRUE, portMAX_DELAY );  
+            //  stripshowtime=micros()-stripshowtime;
+          //  Serial.printf("FUcking stripshow tiime:%d",int(stripshowtime));  
               //  stripA.show();
              // break;
               /*
@@ -153,20 +185,59 @@ void ledloop(void *pvParameters)
               break;
           }  
               */
+              
         numDiv++;
         if(numDiv >= (Div / LedStripCount)) numDiv = 0;
        // donetime=micros()-donetime;
         //Serial.printf("FUcking done tiime:%d",int(donetime));
-        stripshowtime=micros()-stripshowtime;
-              Serial.printf("FUcking stripshow tiime:%d",int(stripshowtime));  
         }
         if(stateDiv == 0 ){
           
           strip.ClearTo(black);
-          strip.Show();
           strip2.ClearTo(black);
-          strip2.Show();
           }
+    }
+  }
+
+void loop1(void *pvParameters)  // This is a task.
+{
+
+  for (;;)
+  {
+  TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
+  TIMERG0.wdt_feed=1;
+  TIMERG0.wdt_wprotect=0;
+
+  ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+  long stripshowtime=micros();
+  //Serial.println("Strip1 Show");
+    strip.Show();
+   //Serial.println("[Strip1 Done]");
+   //stripshowtime=micros()-stripshowtime;
+  // Serial.printf("[strip1]:%d",int(stripshowtime));  
+  Serial.printf("[1]:%d\n",int(micros()-stripshowtime));
+  //ESP_LOGD("[1]:%ld\n",micros()-stripshowtime);
+  }
+}
+void loop2(void *pvParameters)  // This is a task.
+{
+
+  for (;;)
+  {
+    TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
+  TIMERG0.wdt_feed=1;
+  TIMERG0.wdt_wprotect=0;
+  
+  ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+// long stripshowtime=micros();
+    //Serial.println("Strip2 Show");
+     strip2.Show();
+    // xTaskNotifyGive( loopSetledHandle );
+   // Serial.println("[Strip2 Done]");
+  // stripshowtime=micros()-stripshowtime;
+  // Serial.printf("[strip2]:%d",int(stripshowtime));
+  //Serial.printf("[2]:%d\n",int(micros()-stripshowtime)); 
+   // ESP_LOGD("[2]:%ld\n",micros()-stripshowtime);
   }
 }
   
