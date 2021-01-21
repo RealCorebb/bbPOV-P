@@ -1,25 +1,29 @@
-
 #include <WiFi.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncElegantOTA.h>
 #include <NeoPixelBus.h>
+#include <SPI.h>
 #include <ESPmDNS.h>
 #include "SD_MMC.h"
 #include "JPEGDEC.h"
-
+#include <Ticker.h>
+#include "soc/timer_group_struct.h"
+#include "soc/timer_group_reg.h"
 //显示相关
 #define PixelCount 80  //单边LED数量
 #define LedStripCount 2  //LED条数
+#define BufferNum 2
 uint32_t Frame = 0;
 byte Hall = 0;  //到达顶端的霍尔传感器代号
-uint32_t Div = 360;
-
+uint32_t Div = 320;
+uint16_t (*imgBuffer)[PixelCount][BufferNum];
 
 //一些机制需要用到的全局变量
+Ticker hallHit;
 JPEGDEC jpeg;
 File myfile;
-NeoBuffer <NeoBufferMethod<DotStarBgrFeature>> *imagebuffer;
+
 AsyncWebServer server(80);
 int numRot= 0;
 int numDiv = 0;
@@ -28,38 +32,43 @@ int spinstae = 1;
 volatile unsigned long rotTime, timeOld, timeNow, opeTime, spinTime;
 NeoPixelBus<DotStarBgrFeature, DotStarSpiMethod2> strip2(PixelCount);
 NeoPixelBus<DotStarBgrFeature, DotStarSpiMethod> strip(PixelCount);
+
 AsyncWebSocket ws("/ws");
 RgbColor black(0);
 
-
-void RotCountCommon(){
+void IRAM_ATTR RotCountCommon(){
   static unsigned long last_interrupt_time = 0;
   unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
     if (interrupt_time - last_interrupt_time > 20)
-    {    
+    { 
+      numDiv=0;   
       timeNow = micros();
       rotTime = timeNow - timeOld;
       timeOld = timeNow;
-      Serial.println("RotCount");
+     // Serial.println("RotCount");
     }
    last_interrupt_time = interrupt_time;
   }
   
-void RotCount0(){
+void IRAM_ATTR RotCount0(){
     Hall=0;
     RotCountCommon();
   }
-void RotCount1(){
+void IRAM_ATTR RotCount1(){
     Hall=1;
     RotCountCommon();
   }
+
 void setup()
 {
      pinMode(34,INPUT);
-     pinMode(35,INPUT);
+     pinMode(35,INPUT); 
      Serial.begin(115200);
-     NeoBuffer <NeoBufferMethod<DotStarBgrFeature>> imagebufferint(80, 360, NULL);
-     imagebuffer = &imagebufferint; 
+       if(imgBuffer = (uint16_t(*)[PixelCount][BufferNum]) calloc(PixelCount*Div*BufferNum,sizeof(uint16_t)))
+    Serial.println("Alloc memory OK");
+     if(!SD_MMC.begin("/sdcard")){
+        Serial.println("Card Mount Failed");
+    }   
      WiFi.mode(WIFI_AP);
      WiFi.softAP("bbPOV-P");
       MDNS.begin("bbPOV");
@@ -68,9 +77,7 @@ void setup()
       request->send(200, "text/plain", "Hi! I am bbPOV-P.");
     });
     AsyncElegantOTA.begin(&server);    // Start ElegantOTA
-    if(!SD_MMC.begin("/sdcard"),true){
-        Serial.println("Card Mount Failed");
-    }
+    
     server.serveStatic("/", SD_MMC, "/");
     server.begin();
     Serial.println("HTTP server started");
@@ -78,14 +85,7 @@ void setup()
     strip.Show();
     strip2.Begin(32,25,33,26);
     strip2.Show();
-    Serial.println("Setup Done");
-
-    attachInterrupt(35, RotCount0, FALLING );
-    attachInterrupt(34, RotCount1, FALLING );
-
-    
-   
-  long lTime; 
+    long lTime;
   if (jpeg.open("/sb.jpg", myOpen, myClose, myRead, mySeek, JPEGDraw))
   {
     Serial.println("Successfully opened JPEG image");
@@ -101,43 +101,66 @@ void setup()
     }
     jpeg.close();
   }
-  Serial.printf("\n\navailable heap in main %i\n", ESP.getFreeHeap());
-  Serial.printf("biggest free block: %i\n\”", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    attachInterrupt(35, RotCount0, FALLING );
+    attachInterrupt(34, RotCount1, FALLING );
+    Serial.println("Setup Done");           
 }
-void loop() {
+void loop() { 
     AsyncElegantOTA.loop(); 
-    if(stateDiv == 1 && micros() - timeOld > (rotTime / (Div/LedStripCount)) * (numDiv)){
+        if(stateDiv == 1 && micros() - timeOld > (rotTime / (Div/LedStripCount)) * (numDiv)){
         stateDiv = 0;
       }
-      if(stateDiv == 0 && micros() - timeOld < (rotTime / (Div/LedStripCount)) * (numDiv + 1)){
+      if(stateDiv == 0 && micros() - timeOld < (rotTime / (Div/LedStripCount)) * (numDiv + 1 )){
         stateDiv = 1;
+      //  long donetime=micros();
         switch(Hall){
             case 0:
-              strip.ClearTo(black);
+             // strip.ClearTo(black);
+             // strip2.ClearTo(black);
+             // long nowtime=micros();
               for(int i = 0; i < PixelCount; i++){
-                imagebuffer->Blt(strip,0,0,0,80);
-             //  strip.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv][i] & 0x001F)<<3)));
-             //  strip2.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x001F)<<3)));
+                uint16_t color = imgBuffer[numDiv][i][0];
+                uint16_t color2 = imgBuffer[numDiv+Div/LedStripCount][i][0];
+                strip.SetPixelColor(i, RgbColor(uint8_t((color & 0xF800)>>8),uint8_t((color & 0x07C0)>>3),uint8_t((color & 0x001F)<<3)));
+                strip2.SetPixelColor(i, RgbColor(uint8_t((color2 & 0xF800)>>8),uint8_t((color2 & 0x07C0)>>3),uint8_t((color2 & 0x001F)<<3)));
               }
-              strip.Show();  
+             // Serial.printf("FUcking setpixel tiime:%d",int(micros()-nowtime));
+            //  long stripshowtime=micros();
+              strip.Show();
               strip2.Show();  
+            //  stripshowtime=micros()-stripshowtime;
+             // Serial.printf("FUcking stripshow tiime:%d",int(stripshowtime));  
               break;
+              
             case 1:
-              strip.ClearTo(black);
+              //strip.ClearTo(black);
+             // strip2.ClearTo(black);
               for(int i = 0; i < PixelCount; i++){
-             //  strip2.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv][i] & 0x001F)<<3)));
-              // strip.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x001F)<<3)));
-              }
+                uint16_t color = imgBuffer[numDiv][i][0];
+                uint16_t color2 = imgBuffer[numDiv+Div/LedStripCount][i][0];
+                strip2.SetPixelColor(i, RgbColor(uint8_t((color & 0xF800)>>8),uint8_t((color & 0x07C0)>>3),uint8_t((color & 0x001F)<<3)));
+                strip.SetPixelColor(i, RgbColor(uint8_t((color2 & 0xF800)>>8),uint8_t((color2 & 0x07C0)>>3),uint8_t((color2 & 0x001F)<<3)));
+             }
               strip2.Show();  
               strip.Show();  
               break;
           }  
               
         numDiv++;
-      if(numDiv >= Div / LedStripCount) numDiv = 0;
-      }
-}
-
+        if(numDiv >= (Div / LedStripCount)) numDiv = 0;
+       // donetime=micros()-donetime;
+        //Serial.printf("FUcking done tiime:%d",int(donetime));
+        }
+        /*
+        if(stateDiv == 0 ){
+          
+          strip.ClearTo(black);
+          strip.Show();
+          strip2.ClearTo(black);
+          strip2.Show();
+          }*/
+  }
+  
 void * myOpen(const char *filename, int32_t *size) {
   Serial.println("Open");
   myfile = SD_MMC.open(filename);
@@ -158,14 +181,15 @@ int32_t mySeek(JPEGFILE *handle, int32_t position) {
 
 int JPEGDraw(JPEGDRAW *pDraw) {
 
-  //Serial.printf("jpeg draw: x,y=%d,%d, cx,cy = %d,%d\n",pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
+  Serial.printf("jpeg draw: x,y=%d,%d, cx,cy = %d,%d\n",pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
   //Serial.printf("Before Pixel 80 = 0x%04x\n", pDraw->pPixels[80]);
   int pixels=pDraw->iWidth*pDraw->iHeight;
-  for (int i = 0 ;i<=pixels;i++){
-      uint8_t b = uint8_t((pDraw->pPixels[i] & 0x001F)<<3); // 5 LSB for blue
-      uint8_t g = uint8_t((pDraw->pPixels[i] & 0x07C0)>>3); // 6 'middle' bits for green
-      uint8_t r = uint8_t((pDraw->pPixels[i] & 0xF800)>>8); // 5 MSB for red
-      imagebuffer->SetPixelColor(pDraw->x+i%80,pDraw->y+i/80,RgbColor(r,g,b));
-    }
+ // if(pDraw->x+pDraw->y*PixelCount+pixels>=Div*PixelCount){
+//   pixels=pDraw->x+pDraw->y*PixelCount+pixels-Div*PixelCount;
+ // }
+ // else{
+    memcpy(&imgBuffer[pDraw->y][pDraw->x][0],pDraw->pPixels,sizeof(uint16_t)*pixels);
+   // Serial.println(ESP.getFreeHeap());
+  //}
   return 1;
-}
+}    

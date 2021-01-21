@@ -15,7 +15,7 @@
 #define LedStripCount 2  //LED条数
 uint32_t Frame = 0;
 byte Hall = 0;  //到达顶端的霍尔传感器代号
-uint32_t Div = 360;
+uint32_t Div = 320;
 
 
 //一些机制需要用到的全局变量
@@ -99,25 +99,25 @@ void setup()
     ,  "loop1"   // A name just for humans
     ,  5000  // This stack size can be checked & adjusted by reading the Stack Highwater
     ,  NULL
-    ,  20  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    ,  5  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
     ,  &loop1Handle 
-    ,  0);
+    ,  1);
 
   xTaskCreatePinnedToCore(
     loop2
     ,  "loop2"
     ,  5000  // Stack size
     ,  NULL
-    ,  20  // Priority
+    ,  5  // Priority
     ,  &loop2Handle 
-    ,  0);
+    ,  1);
 
   xTaskCreatePinnedToCore(
     loopSetled
     ,  "loopSetled"
     ,  10000  // Stack size
     ,  NULL
-    ,  20  // Priority
+    ,  5  // Priority
     ,  &loopSetledHandle
     ,  1);
          
@@ -127,6 +127,7 @@ void loop() {
     //AsyncElegantOTA.loop(); 
    //Serial.println("mainloop");        
 }
+
 void loopSetled(void *pvParameters){
   for (;;)
   {
@@ -160,7 +161,7 @@ void loopSetled(void *pvParameters){
               }
              // Serial.printf("FUcking setpixel tiime:%d",int(micros()-nowtime));
               //  FastLED.show(); 
-           //  stripshowtime=micros();
+             //stripshowtime=micros();
               //strip.Show();       
               //strip2.Show();  
               xTaskNotifyGive( loop1Handle );
@@ -209,13 +210,15 @@ void loop1(void *pvParameters)  // This is a task.
   TIMERG0.wdt_wprotect=0;
 
   ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-  long stripshowtime=micros();
+ 
+  //long stripshowtime=micros();
   //Serial.println("Strip1 Show");
     strip.Show();
+    // Serial.printf("[1]:%d\n",int(micros()-stripshowtime));
    //Serial.println("[Strip1 Done]");
    //stripshowtime=micros()-stripshowtime;
   // Serial.printf("[strip1]:%d",int(stripshowtime));  
-  Serial.printf("[1]:%d\n",int(micros()-stripshowtime));
+  
   //ESP_LOGD("[1]:%ld\n",micros()-stripshowtime);
   }
 }
@@ -229,9 +232,11 @@ void loop2(void *pvParameters)  // This is a task.
   TIMERG0.wdt_wprotect=0;
   
   ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+  
 // long stripshowtime=micros();
     //Serial.println("Strip2 Show");
      strip2.Show();
+    // Serial.printf("[2]:%d\n",int(micros()-stripshowtime));
     // xTaskNotifyGive( loopSetledHandle );
    // Serial.println("[Strip2 Done]");
   // stripshowtime=micros()-stripshowtime;

@@ -10,3 +10,4 @@ Arduino/HardwareTest/NeoPixelRainbow/NeoPixelRainbow.ino.esp32.bin
 API/magic.gif
 *.bin
 API/sb.py
+*.bmp

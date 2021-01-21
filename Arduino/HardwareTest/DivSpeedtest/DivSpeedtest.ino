@@ -15,7 +15,7 @@
 #define LedStripCount 2  //LED条数
 uint32_t Frame = 0;
 byte Hall = 0;  //到达顶端的霍尔传感器代号
-uint32_t Div = 320;
+uint32_t Div = 360;
 
 
 //一些机制需要用到的全局变量
@@ -51,8 +51,7 @@ void RotCountCommon(){
       //Serial.println("RotCount");
     }
    last_interrupt_time = interrupt_time;
-  }
-  
+  } 
 void setup()
 {
      pinMode(34,INPUT);
@@ -65,14 +64,7 @@ void setup()
      WiFi.softAP("bbPOV-P");
       MDNS.begin("bbPOV");
       MDNS.addService("bbPOV", "tcp", 80);
-     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send(200, "text/plain", "Hi! I am bbPOV-P.");
-    });
-    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
     
-    server.serveStatic("/", SD_MMC, "/");
-    server.begin();
-    Serial.println("HTTP server started");
     strip.Begin();
     strip.Show();
     strip2.Begin(32,25,33,26);
@@ -85,20 +77,30 @@ void setup()
     
     Serial.println("Setup Done");   
 
-
+    xTaskCreatePinnedToCore(
+    webloop
+    ,  "webloop"
+    ,  1000  // Stack size
+    ,  NULL
+    ,  2 // Priority
+    ,  NULL 
+    ,  0); 
+    
     xTaskCreatePinnedToCore(
     ledloop
     ,  "ledloop"
-    ,  5000  // Stack size
+    ,  1000  // Stack size
     ,  NULL
     ,  5 // Priority
     ,  NULL 
-    ,  0);       
+    ,  1);
+
+    
+        
 }
 void loop() { 
-   // AsyncElegantOTA.loop(); 
+   //AsyncElegantOTA.loop(); 
 }
-
 void ledloop(void *pvParameters)
 {
   for (;;)
@@ -110,7 +112,7 @@ void ledloop(void *pvParameters)
         stateDiv = 0;
       }
       if(stateDiv == 0 && micros() - timeOld < (rotTime / (Div/LedStripCount)) * (numDiv + 1 )){
-        long stripshowtime=micros();
+     //   long stripshowtime=micros();
         stateDiv = 1;
       //  long donetime=micros();
        // switch(Hall){
@@ -157,16 +159,29 @@ void ledloop(void *pvParameters)
         if(numDiv >= (Div / LedStripCount)) numDiv = 0;
        // donetime=micros()-donetime;
         //Serial.printf("FUcking done tiime:%d",int(donetime));
-        stripshowtime=micros()-stripshowtime;
-              Serial.printf("FUcking stripshow tiime:%d",int(stripshowtime));  
+      //  stripshowtime=micros()-stripshowtime;
+        //      Serial.printf("FUcking stripshow tiime:%d",int(stripshowtime));  
         }
         if(stateDiv == 0 ){
           
-          strip.ClearTo(black);
-          strip.Show();
-          strip2.ClearTo(black);
-          strip2.Show();
+          //strip.ClearTo(black);
+         /// strip.Show();
+         // strip2.ClearTo(black);
+         // strip2.Show();
           }
   }
+}
+
+void webloop(void *pvParameters)
+{
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->send(200, "text/plain", "Hi! I am bbPOV-P.");
+    });
+    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
+    
+    server.serveStatic("/", SD_MMC, "/");
+    server.begin(); 
+    Serial.println("HTTP server started");
+    vTaskDelete(NULL);
 }
   

@@ -15,16 +15,20 @@
 //显示相关
 #define PixelCount 80  //单边LED数量
 #define LedStripCount 2  //LED条数
-uint32_t Frame = 0;
+#define BufferNum 2
+int Frame = 0;
 byte Hall = 0;  //到达顶端的霍尔传感器代号
-uint32_t Div = 320;
-uint16_t (*imgBuffer)[PixelCount];
-uint16_t (*imgBuffer2)[PixelCount];
+int Div = 320;
+uint16_t (*imgBuffer)[320][PixelCount];
 
 //一些机制需要用到的全局变量
 Ticker hallHit;
 JPEGDEC jpeg;
+File root;
+File dir;
 File myfile;
+TaskHandle_t nextFileHandle; 
+int bufferRot=-1;
 
 AsyncWebServer server(80);
 int numRot= 0;
@@ -41,7 +45,7 @@ AsyncWebSocket ws("/ws");
 RgbColor black(0);
 
 
-void RotCountCommon(){
+void IRAM_ATTR RotCountCommon(){
   
   static unsigned long last_interrupt_time = 0;
   unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
@@ -51,6 +55,9 @@ void RotCountCommon(){
       timeNow = micros();
       rotTime = timeNow - timeOld;
       timeOld = timeNow;
+      bufferRot++;
+      if(bufferRot>=BufferNum-1) bufferRot=0;
+      //xTaskNotifyGive( nextFileHandle );
       //Serial.println("RotCount");
     }
    last_interrupt_time = interrupt_time;
@@ -58,14 +65,17 @@ void RotCountCommon(){
   
 void setup()
 {
+     pinMode(15, INPUT_PULLUP);
+  pinMode(2, INPUT_PULLUP);
+  pinMode(4, INPUT_PULLUP);
+  pinMode(12, INPUT_PULLUP);
+  pinMode(13, INPUT_PULLUP);
      pinMode(34,INPUT);
      pinMode(35,INPUT); 
      Serial.begin(115200);
-       if(imgBuffer = (uint16_t(*)[PixelCount]) calloc(PixelCount*Div,sizeof(uint16_t)))
-    Serial.println("Alloc memory1 OK");
-      if(imgBuffer2 = (uint16_t(*)[PixelCount]) calloc(PixelCount*Div,sizeof(uint16_t)))
-        Serial.println("Alloc memory2 OK");
-     if(!SD_MMC.begin("/sdcard")){
+       if(imgBuffer = (uint16_t(*)[320][PixelCount]) calloc(PixelCount*Div*BufferNum,sizeof(uint16_t)))
+    Serial.println("Alloc memory OK");
+     if(!SD_MMC.begin("/sdcard",true)){
         Serial.println("Card Mount Failed");
     }   
      WiFi.mode(WIFI_AP);
@@ -88,15 +98,18 @@ void setup()
     //stripA.show();  // Turn all LEDs off ASAP
 //    FastLED.addLeds<APA102,23,18,BGR,DATA_RATE_MHZ(30)>(leds, PixelCount);
   //  FastLED.show();
-    hallHit.attach(0.033,RotCountCommon);
+    
+    root=SD_MMC.open("/bbPOV-P");
+    dir=root.openNextFile();  
+    while(!dir.isDirectory()){
+      dir=root.openNextFile();
+      if(!dir)
+        break;
+    }
+    Serial.println(dir.name());
     long lTime;
-  if (jpeg.open("/sb.jpg", myOpen, myClose, myRead, mySeek, JPEGDraw))
+  if (jpeg.open("", myOpen, myClose, myRead, mySeek, JPEGDraw))
   {
-    Serial.println("Successfully opened JPEG image");
-    Serial.printf("Image size: %d x %d, orientation: %d, bpp: %d\n", jpeg.getWidth(),
-      jpeg.getHeight(), jpeg.getOrientation(), jpeg.getBpp());
-    if (jpeg.hasThumb())
-       Serial.printf("Thumbnail present: %d x %d\n", jpeg.getThumbWidth(), jpeg.getThumbHeight());
     lTime = micros();
     if (jpeg.decode(0,0,0))
     {
@@ -105,11 +118,17 @@ void setup()
     }
     jpeg.close();
   }
-  Serial.printf("After Pixel 80 = 0x%04x\n", imgBuffer[160][50]);
+  Serial.printf("After Pixel = 0x%02x\n", imgBuffer[0][160][50]);
   Serial.printf("\n\navailable heap in main %i\n", ESP.getFreeHeap());
   Serial.printf("biggest free block: %i\n\”", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+  bufferRot=0;
+      
 
-    Serial.println("Setup Done");           
+  
+
+
+   hallHit.attach(0.033,RotCountCommon); 
+   Serial.println("Setup Done");         
 }
 void loop() { 
     AsyncElegantOTA.loop(); 
@@ -125,8 +144,8 @@ void loop() {
               strip2.ClearTo(black);
              // long nowtime=micros();
               for(int i = 0; i < PixelCount; i++){
-                uint16_t color = imgBuffer[numDiv][i];
-                uint16_t color2 = imgBuffer[numDiv+Div/LedStripCount][i];
+                uint16_t color = imgBuffer[0][numDiv][i];
+                uint16_t color2 = imgBuffer[0][numDiv+Div/LedStripCount][i];
                 strip.SetPixelColor(i, RgbColor(uint8_t((color & 0xF800)>>8),uint8_t((color & 0x07C0)>>3),uint8_t((color & 0x001F)<<3)));
                 strip2.SetPixelColor(i, RgbColor(uint8_t((color2 & 0xF800)>>8),uint8_t((color2 & 0x07C0)>>3),uint8_t((color2 & 0x001F)<<3)));
               }
@@ -167,8 +186,13 @@ void loop() {
   }
   
 void * myOpen(const char *filename, int32_t *size) {
-  Serial.println("Open");
-  myfile = SD_MMC.open(filename);
+ // Serial.println("Open");
+  myfile = dir.openNextFile();
+  if(!myfile){
+        dir.rewindDirectory();
+        myfile = dir.openNextFile();
+      }
+  //Serial.println(myfile.name());
   *size = myfile.size();
   return &myfile;
 }
@@ -186,15 +210,33 @@ int32_t mySeek(JPEGFILE *handle, int32_t position) {
 
 int JPEGDraw(JPEGDRAW *pDraw) {
 
-  Serial.printf("jpeg draw: x,y=%d,%d, cx,cy = %d,%d\n",pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
+ // Serial.printf("jpeg draw: x,y=%d,%d, cx,cy = %d,%d\n",pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
   //Serial.printf("Before Pixel 80 = 0x%04x\n", pDraw->pPixels[80]);
+  int sdbufferRot = bufferRot+1;
+  if(sdbufferRot >= BufferNum-1) sdbufferRot=0;
   int pixels=pDraw->iWidth*pDraw->iHeight;
-  if(pDraw->x+pDraw->y*PixelCount+pixels>=Div*PixelCount){
-   pixels=pDraw->x+pDraw->y*PixelCount+pixels-Div*PixelCount;
-  }
-  else{
-    memcpy(&imgBuffer[pDraw->y][pDraw->x],pDraw->pPixels,sizeof(uint16_t)*pixels);
+    memcpy(&imgBuffer[0][pDraw->y][pDraw->x],pDraw->pPixels,sizeof(uint16_t)*pixels);
    // Serial.println(ESP.getFreeHeap());
-  }
   return 1;
+}
+
+void nextFile(void *pvParameters){
+  for (;;)
+  {
+  TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
+  TIMERG0.wdt_feed=1;
+  TIMERG0.wdt_wprotect=0;
+  ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+  long lTime=micros();
+    if (jpeg.open("", myOpen, myClose, myRead, mySeek, JPEGDraw))
+  {
+
+    if (jpeg.decode(0,0,0))
+    {
+      lTime = micros() - lTime;
+      //Serial.printf("Successfully decoded image in %d us\n", (int)lTime);
+    }
+    jpeg.close();
+  }
+}
 }
