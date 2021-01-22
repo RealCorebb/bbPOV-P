@@ -8,6 +8,7 @@ import time
 from threading import Thread
 import cv2
 import time
+
 #配置
 NUMPIXELS = 80 #单边LED数量
 Div = 320 #1圈分割数
@@ -22,9 +23,7 @@ posY = 0
 posX2 = 160
 posY2 = 160
 
-
 def polarConv(imgOrgin):
-    global count
     h = imgOrgin.height #帧尺寸
     w = imgOrgin.width
     #画像縮小
@@ -32,9 +31,9 @@ def polarConv(imgOrgin):
     polar_image = cv2.warpPolar(imgRedu,(NUMPIXELS , Div ), (imgRedu.shape[1]/2,imgRedu.shape[0]/2) ,min(imgRedu.shape[0], imgRedu.shape[1]) / 2, 0)
     hsv = cv2.cvtColor(polar_image,cv2.COLOR_BGR2HSV)
     for i in range(NUMPIXELS):                #亮度处理
-        hsv[:,i,2] = hsv[:,i,2] * (i * ((Bright-Led0Bright)/NUMPIXELS) / 100)
+        hsv[:,i,2] = hsv[:,i,2] * ((Led0Bright + i * ((Bright-Led0Bright)/NUMPIXELS)) / 100)
     final = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-    cv2.imwrite(str(time.time() * 1000)+'.jpg',final)
+    cv2.imwrite(str(time.time_ns())+'.jpg',final)
 def capture():
     global posX
     global posY
@@ -43,10 +42,9 @@ def capture():
     while running:
             #捕捉屏幕
             last_time = time.time()
-            if((1 / (time.time()-last_time))<30):
-                frame = mss().grab({'top': posY, 'left': posX, 'width': posX2-posX, 'height': posY2-posY})
-                polarConv(frame)
-                print('fps: {0}'.format(1 / (time.time()-last_time)))
+            frame = mss().grab({'top': posY, 'left': posX, 'width': posX2-posX, 'height': posY2-posY})
+            polarConv(frame)
+            print('fps: {0}'.format(1 / (time.time()-last_time)))
 def startCapture():
     global running
     alpha = 0

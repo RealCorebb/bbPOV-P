@@ -7,22 +7,24 @@
 #include <ESPmDNS.h>
 #include "SD_MMC.h"
 #include "JPEGDEC.h"
-#include <Ticker.h>
 #include "soc/timer_group_struct.h"
 #include "soc/timer_group_reg.h"
 //显示相关
 #define PixelCount 80  //单边LED数量
 #define LedStripCount 2  //LED条数
 #define BufferNum 2
-uint32_t Frame = 0;
+#define Div 320
+int Frame = 0;
 byte Hall = 0;  //到达顶端的霍尔传感器代号
-uint32_t Div = 320;
-uint16_t (*imgBuffer)[PixelCount][BufferNum];
+uint16_t (*imgBuffer)[320][PixelCount];
 
 //一些机制需要用到的全局变量
-Ticker hallHit;
 JPEGDEC jpeg;
+File root;
+File dir;
 File myfile;
+TaskHandle_t nextFileHandle; 
+int bufferRot=-1;
 
 AsyncWebServer server(80);
 int numRot= 0;
@@ -36,16 +38,21 @@ NeoPixelBus<DotStarBgrFeature, DotStarSpiMethod> strip(PixelCount);
 AsyncWebSocket ws("/ws");
 RgbColor black(0);
 
+
 void IRAM_ATTR RotCountCommon(){
+  
   static unsigned long last_interrupt_time = 0;
   unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
     if (interrupt_time - last_interrupt_time > 20)
-    { 
-      numDiv=0;   
+    {    
+      numDiv=0;
       timeNow = micros();
       rotTime = timeNow - timeOld;
       timeOld = timeNow;
-     // Serial.println("RotCount");
+      bufferRot++;
+      if(bufferRot>=BufferNum-1) bufferRot=0;
+      xTaskNotifyGive( nextFileHandle );
+    //  Serial.println("RotCount");
     }
    last_interrupt_time = interrupt_time;
   }
@@ -64,7 +71,7 @@ void setup()
      pinMode(34,INPUT);
      pinMode(35,INPUT); 
      Serial.begin(115200);
-       if(imgBuffer = (uint16_t(*)[PixelCount][BufferNum]) calloc(PixelCount*Div*BufferNum,sizeof(uint16_t)))
+     if(imgBuffer = (uint16_t(*)[320][PixelCount]) calloc(PixelCount*Div*BufferNum,sizeof(uint16_t)))
     Serial.println("Alloc memory OK");
      if(!SD_MMC.begin("/sdcard")){
         Serial.println("Card Mount Failed");
@@ -73,26 +80,22 @@ void setup()
      WiFi.softAP("bbPOV-P");
       MDNS.begin("bbPOV");
       MDNS.addService("bbPOV", "tcp", 80);
-     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send(200, "text/plain", "Hi! I am bbPOV-P.");
-    });
-    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
-    
-    server.serveStatic("/", SD_MMC, "/");
-    server.begin();
-    Serial.println("HTTP server started");
     strip.Begin();
     strip.Show();
     strip2.Begin(32,25,33,26);
     strip2.Show();
     long lTime;
-  if (jpeg.open("/sb.jpg", myOpen, myClose, myRead, mySeek, JPEGDraw))
+
+    root=SD_MMC.open("/bbPOV-P");
+    dir=root.openNextFile();  
+    while(!dir.isDirectory()){
+      dir=root.openNextFile();
+      if(!dir)
+        break;
+    }
+    
+  if (jpeg.open("", myOpen, myClose, myRead, mySeek, JPEGDraw))
   {
-    Serial.println("Successfully opened JPEG image");
-    Serial.printf("Image size: %d x %d, orientation: %d, bpp: %d\n", jpeg.getWidth(),
-      jpeg.getHeight(), jpeg.getOrientation(), jpeg.getBpp());
-    if (jpeg.hasThumb())
-       Serial.printf("Thumbnail present: %d x %d\n", jpeg.getThumbWidth(), jpeg.getThumbHeight());
     lTime = micros();
     if (jpeg.decode(0,0,0))
     {
@@ -101,12 +104,47 @@ void setup()
     }
     jpeg.close();
   }
+  bufferRot=0;
     attachInterrupt(35, RotCount0, FALLING );
     attachInterrupt(34, RotCount1, FALLING );
-    Serial.println("Setup Done");           
+
+      xTaskCreatePinnedToCore(
+    nextFile
+    ,  "nextFile"
+    ,  5000  // Stack size
+    ,  NULL
+    ,  4  // Priority
+    ,  &nextFileHandle 
+    ,  0); 
+    xTaskCreatePinnedToCore(
+    webloop
+    ,  "webloop"
+    ,  1000  // Stack size
+    ,  NULL
+    ,  2 // Priority
+    ,  NULL 
+    ,  0);   
+
+    xTaskCreatePinnedToCore(
+    ledloop
+    ,  "ledloop"
+    ,  1000  // Stack size
+    ,  NULL
+    ,  5 // Priority
+    ,  NULL 
+    ,  1);
+    Serial.println("Setup Done");              
 }
 void loop() { 
-    AsyncElegantOTA.loop(); 
+   // AsyncElegantOTA.loop();
+} 
+void ledloop(void *pvParameters)
+{
+  for (;;)
+  {
+    TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
+    TIMERG0.wdt_feed=1;
+    TIMERG0.wdt_wprotect=0; 
         if(stateDiv == 1 && micros() - timeOld > (rotTime / (Div/LedStripCount)) * (numDiv)){
         stateDiv = 0;
       }
@@ -119,8 +157,8 @@ void loop() {
              // strip2.ClearTo(black);
              // long nowtime=micros();
               for(int i = 0; i < PixelCount; i++){
-                uint16_t color = imgBuffer[numDiv][i][0];
-                uint16_t color2 = imgBuffer[numDiv+Div/LedStripCount][i][0];
+                uint16_t color = imgBuffer[bufferRot][numDiv][i];
+                uint16_t color2 = imgBuffer[bufferRot][numDiv+Div/LedStripCount][i];
                 strip.SetPixelColor(i, RgbColor(uint8_t((color & 0xF800)>>8),uint8_t((color & 0x07C0)>>3),uint8_t((color & 0x001F)<<3)));
                 strip2.SetPixelColor(i, RgbColor(uint8_t((color2 & 0xF800)>>8),uint8_t((color2 & 0x07C0)>>3),uint8_t((color2 & 0x001F)<<3)));
               }
@@ -136,8 +174,8 @@ void loop() {
               //strip.ClearTo(black);
              // strip2.ClearTo(black);
               for(int i = 0; i < PixelCount; i++){
-                uint16_t color = imgBuffer[numDiv][i][0];
-                uint16_t color2 = imgBuffer[numDiv+Div/LedStripCount][i][0];
+                uint16_t color = imgBuffer[bufferRot][numDiv][i];
+                uint16_t color2 = imgBuffer[bufferRot][numDiv+Div/LedStripCount][i];
                 strip2.SetPixelColor(i, RgbColor(uint8_t((color & 0xF800)>>8),uint8_t((color & 0x07C0)>>3),uint8_t((color & 0x001F)<<3)));
                 strip.SetPixelColor(i, RgbColor(uint8_t((color2 & 0xF800)>>8),uint8_t((color2 & 0x07C0)>>3),uint8_t((color2 & 0x001F)<<3)));
              }
@@ -160,10 +198,30 @@ void loop() {
           strip2.Show();
           }*/
   }
-  
+}
+
+void webloop(void *pvParameters)
+{
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->send(200, "text/plain", "Hi! I am bbPOV-P.");
+    });
+    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
+    
+    server.serveStatic("/", SD_MMC, "/");
+    server.begin(); 
+    Serial.println("HTTP server started");
+    vTaskDelete(NULL);
+}
+
+ 
 void * myOpen(const char *filename, int32_t *size) {
-  Serial.println("Open");
-  myfile = SD_MMC.open(filename);
+ // Serial.println("Open");
+  myfile = dir.openNextFile();
+  if(!myfile){
+        dir.rewindDirectory();
+        myfile = dir.openNextFile();
+      }
+// Serial.println(myfile.name());
   *size = myfile.size();
   return &myfile;
 }
@@ -181,15 +239,34 @@ int32_t mySeek(JPEGFILE *handle, int32_t position) {
 
 int JPEGDraw(JPEGDRAW *pDraw) {
 
-  Serial.printf("jpeg draw: x,y=%d,%d, cx,cy = %d,%d\n",pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
+ // Serial.printf("jpeg draw: x,y=%d,%d, cx,cy = %d,%d\n",pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
   //Serial.printf("Before Pixel 80 = 0x%04x\n", pDraw->pPixels[80]);
+  int sdbufferRot = bufferRot+1;
+  if(sdbufferRot >= BufferNum-1) sdbufferRot=0;
   int pixels=pDraw->iWidth*pDraw->iHeight;
- // if(pDraw->x+pDraw->y*PixelCount+pixels>=Div*PixelCount){
-//   pixels=pDraw->x+pDraw->y*PixelCount+pixels-Div*PixelCount;
- // }
- // else{
-    memcpy(&imgBuffer[pDraw->y][pDraw->x][0],pDraw->pPixels,sizeof(uint16_t)*pixels);
+    memcpy(&imgBuffer[sdbufferRot][pDraw->y][pDraw->x],pDraw->pPixels,sizeof(uint16_t)*pixels);
    // Serial.println(ESP.getFreeHeap());
-  //}
   return 1;
-}    
+}  
+
+
+void nextFile(void *pvParameters){
+  for (;;)
+  {
+  TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
+  TIMERG0.wdt_feed=1;
+  TIMERG0.wdt_wprotect=0;
+  ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+  //long lTime=micros();
+    if (jpeg.open("", myOpen, myClose, myRead, mySeek, JPEGDraw))
+  {
+
+    if (jpeg.decode(0,0,0))
+    {
+     // lTime = micros() - lTime;
+     // Serial.printf("Successfully decoded image in %d us\n", (int)lTime);
+    }
+    jpeg.close();
+  }
+}
+}
