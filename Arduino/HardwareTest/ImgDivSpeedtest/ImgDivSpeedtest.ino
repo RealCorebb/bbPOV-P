@@ -7,8 +7,6 @@
 #include <ESPmDNS.h>
 #include "SD_MMC.h"
 #include "JPEGDEC.h"
-#define FASTLED_ALL_PINS_HARDWARE_SPI
-#include <FastLED.h>
 #include <Ticker.h>
 #include "soc/timer_group_struct.h"
 #include "soc/timer_group_reg.h"
@@ -45,7 +43,7 @@ AsyncWebSocket ws("/ws");
 RgbColor black(0);
 
 
-void IRAM_ATTR RotCountCommon(){
+void RotCountCommon(){
   
   static unsigned long last_interrupt_time = 0;
   unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
@@ -57,8 +55,8 @@ void IRAM_ATTR RotCountCommon(){
       timeOld = timeNow;
       bufferRot++;
       if(bufferRot>=BufferNum-1) bufferRot=0;
-      //xTaskNotifyGive( nextFileHandle );
-      //Serial.println("RotCount");
+      xTaskNotifyGive( nextFileHandle );
+    //  Serial.println("RotCount");
     }
    last_interrupt_time = interrupt_time;
   }
@@ -82,14 +80,6 @@ void setup()
      WiFi.softAP("bbPOV-P");
       MDNS.begin("bbPOV");
       MDNS.addService("bbPOV", "tcp", 80);
-     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send(200, "text/plain", "Hi! I am bbPOV-P.");
-    });
-    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
-    
-    server.serveStatic("/", SD_MMC, "/");
-    server.begin();
-    Serial.println("HTTP server started");
     strip.Begin();
     strip.Show();
     strip2.Begin(32,25,33,26);
@@ -122,21 +112,51 @@ void setup()
   Serial.printf("\n\navailable heap in main %i\n", ESP.getFreeHeap());
   Serial.printf("biggest free block: %i\n\”", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
   bufferRot=0;
-      
 
-  
+  xTaskCreatePinnedToCore(
+    nextFile
+    ,  "nextFile"
+    ,  5000  // Stack size
+    ,  NULL
+    ,  4  // Priority
+    ,  &nextFileHandle 
+    ,  0);
+  hallHit.attach(0.033,RotCountCommon);     
+    xTaskCreatePinnedToCore(
+    webloop
+    ,  "webloop"
+    ,  1000  // Stack size
+    ,  NULL
+    ,  2 // Priority
+    ,  NULL 
+    ,  0);   
 
-
-   hallHit.attach(0.033,RotCountCommon); 
-   Serial.println("Setup Done");         
+    xTaskCreatePinnedToCore(
+    ledloop
+    ,  "ledloop"
+    ,  1000  // Stack size
+    ,  NULL
+    ,  5 // Priority
+    ,  NULL 
+    ,  1);
+    Serial.println("Setup Done");     
 }
 void loop() { 
-    AsyncElegantOTA.loop(); 
+    //AsyncElegantOTA.loop(); 
+}
+void ledloop(void *pvParameters)
+{
+  for (;;)
+  {
+    TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
+    TIMERG0.wdt_feed=1;
+    TIMERG0.wdt_wprotect=0;
         if(stateDiv == 1 && micros() - timeOld > (rotTime / (Div/LedStripCount)) * (numDiv)){
         stateDiv = 0;
       }
       if(stateDiv == 0 && micros() - timeOld < (rotTime / (Div/LedStripCount)) * (numDiv + 1 )){
         stateDiv = 1;
+       
       //  long donetime=micros();
        // switch(Hall){
         //    case 0:
@@ -144,8 +164,8 @@ void loop() {
               strip2.ClearTo(black);
              // long nowtime=micros();
               for(int i = 0; i < PixelCount; i++){
-                uint16_t color = imgBuffer[0][numDiv][i];
-                uint16_t color2 = imgBuffer[0][numDiv+Div/LedStripCount][i];
+                uint16_t color = imgBuffer[bufferRot][numDiv][i];
+                uint16_t color2 = imgBuffer[bufferRot][numDiv+Div/LedStripCount][i];
                 strip.SetPixelColor(i, RgbColor(uint8_t((color & 0xF800)>>8),uint8_t((color & 0x07C0)>>3),uint8_t((color & 0x001F)<<3)));
                 strip2.SetPixelColor(i, RgbColor(uint8_t((color2 & 0xF800)>>8),uint8_t((color2 & 0x07C0)>>3),uint8_t((color2 & 0x001F)<<3)));
               }
@@ -177,14 +197,28 @@ void loop() {
         //Serial.printf("FUcking done tiime:%d",int(donetime));
         }
         if(stateDiv == 0 ){
-          
+          // Serial.println("Fuckup");
           strip.ClearTo(black);
           strip.Show();
           strip2.ClearTo(black);
           strip2.Show();
           }
   }
-  
+} 
+
+void webloop(void *pvParameters)
+{
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->send(200, "text/plain", "Hi! I am bbPOV-P.");
+    });
+    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
+    
+    server.serveStatic("/", SD_MMC, "/");
+    server.begin(); 
+    Serial.println("HTTP server started");
+    vTaskDelete(NULL);
+}
+
 void * myOpen(const char *filename, int32_t *size) {
  // Serial.println("Open");
   myfile = dir.openNextFile();
@@ -192,7 +226,7 @@ void * myOpen(const char *filename, int32_t *size) {
         dir.rewindDirectory();
         myfile = dir.openNextFile();
       }
-  //Serial.println(myfile.name());
+// Serial.println(myfile.name());
   *size = myfile.size();
   return &myfile;
 }
@@ -215,7 +249,7 @@ int JPEGDraw(JPEGDRAW *pDraw) {
   int sdbufferRot = bufferRot+1;
   if(sdbufferRot >= BufferNum-1) sdbufferRot=0;
   int pixels=pDraw->iWidth*pDraw->iHeight;
-    memcpy(&imgBuffer[0][pDraw->y][pDraw->x],pDraw->pPixels,sizeof(uint16_t)*pixels);
+    memcpy(&imgBuffer[sdbufferRot][pDraw->y][pDraw->x],pDraw->pPixels,sizeof(uint16_t)*pixels);
    // Serial.println(ESP.getFreeHeap());
   return 1;
 }
@@ -227,14 +261,14 @@ void nextFile(void *pvParameters){
   TIMERG0.wdt_feed=1;
   TIMERG0.wdt_wprotect=0;
   ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-  long lTime=micros();
+  //long lTime=micros();
     if (jpeg.open("", myOpen, myClose, myRead, mySeek, JPEGDraw))
   {
 
     if (jpeg.decode(0,0,0))
     {
-      lTime = micros() - lTime;
-      //Serial.printf("Successfully decoded image in %d us\n", (int)lTime);
+     // lTime = micros() - lTime;
+     // Serial.printf("Successfully decoded image in %d us\n", (int)lTime);
     }
     jpeg.close();
   }
