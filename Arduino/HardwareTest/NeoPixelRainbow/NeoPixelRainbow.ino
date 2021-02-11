@@ -64,7 +64,7 @@ void setup()
   strip.SetBrightness(16);
   strip.Show();
   strip2.Begin(32, 25, 33, 26);
-  strip2.SetBrightness(88);
+  strip2.SetBrightness(16);
   strip2.Show();
   Serial.println("Setup Done");
 

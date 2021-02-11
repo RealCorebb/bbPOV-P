@@ -1,4 +1,6 @@
-#include <WiFi.h>
+_t#include <WiFi.h>
+#include <WiFiMulti.h>
+WiFiMulti WiFiMulti;
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncElegantOTA.h>
@@ -76,10 +78,26 @@ void setup()
      if(!SD_MMC.begin("/sdcard",true)){
         Serial.println("Card Mount Failed");
     }   
-     WiFi.mode(WIFI_AP);
-     WiFi.softAP("bbPOV-P");
-      MDNS.begin("bbPOV");
-      MDNS.addService("bbPOV", "tcp", 80);
+    // WiFi.mode(WIFI_AP);
+    // WiFi.softAP("bbPOV-P");
+    //  MDNS.begin("bbPOV");
+     // MDNS.addService("bbPOV", "tcp", 80);
+         WiFiMulti.addAP("Hollyshit_A", "00197633");
+
+    Serial.println();
+    Serial.println();
+    Serial.print("Waiting for WiFi... ");
+
+    while(WiFiMulti.run() != WL_CONNECTED) {
+        Serial.print(".");
+        delay(500);
+    }
+
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+    
     strip.Begin();
     strip.Show();
     strip2.Begin(32,25,33,26);
@@ -118,14 +136,14 @@ void setup()
     ,  "nextFile"
     ,  5000  // Stack size
     ,  NULL
-    ,  4  // Priority
+    ,  2  // Priority
     ,  &nextFileHandle 
     ,  0);
   hallHit.attach(0.033,RotCountCommon);     
     xTaskCreatePinnedToCore(
     webloop
     ,  "webloop"
-    ,  1000  // Stack size
+    ,  5000  // Stack size
     ,  NULL
     ,  2 // Priority
     ,  NULL 
@@ -136,7 +154,7 @@ void setup()
     ,  "ledloop"
     ,  1000  // Stack size
     ,  NULL
-    ,  5 // Priority
+    ,  2 // Priority
     ,  NULL 
     ,  1);
     Serial.println("Setup Done");     
@@ -214,6 +232,7 @@ void webloop(void *pvParameters)
     AsyncElegantOTA.begin(&server);    // Start ElegantOTA
     
     server.serveStatic("/", SD_MMC, "/");
+    server.onFileUpload(handleUpload);
     server.begin(); 
     Serial.println("HTTP server started");
     vTaskDelete(NULL);
@@ -273,4 +292,22 @@ void nextFile(void *pvParameters){
     jpeg.close();
   }
 }
+}
+
+void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+  if(!index){
+    Serial.println((String)"UploadStart: " + filename);
+    // open the file on first call and store the file handle in the request object
+    request->_tempFile = SD_MMC.open("/bbPOV-P/Stream/"+filename, "w");
+  }
+  if(len) {
+    // stream the incoming chunk to the opened file
+    request->_tempFile.write(data,len);
+  }
+  if(final){
+    Serial.println((String)"UploadEnd: " + filename + ",size: " + index+len);
+    // close the file handle as the upload is now done
+    request->_tempFile.close();
+    request->send(200);
+  }
 }
