@@ -11,10 +11,10 @@ from PIL import Image
 #Frame = 5 #指定帧数量
 NUMPIXELS = 80 #单边LED数量
 Div = 320#1圈分割数
-Bright = 70 #輝度
+Bright = 60 #輝度
 Led0Bright = 15 #中心LEDの輝度 [%]
 
-gif_file_name = "magiccool.gif"
+gif_file_name = "cat.gif"
 im = Image.open(gif_file_name)
 print(im.is_animated)
 print(im.n_frames)

@@ -51,28 +51,30 @@ void loop()
         {
             if (client.available()) //如果有可读数据
             {
+                if(i==0) lTime = micros();
                 int Received = client.read(ReceiveBuffer,sizeof(ReceiveBuffer));
-                Serial.println(Received);
+               // Serial.println(Received);
                 memcpy(&streamBuffer[512*i],ReceiveBuffer,Received);
                 bufferSize+=Received;
                 i++;
-                Serial.println("memcpy Done");
-                if (Received!=512){
+               // Serial.println("memcpy Done");
+                if(ReceiveBuffer[Received-2]==0xFF && ReceiveBuffer[Received-1]==0xD9){   //JPG结尾
+                  //Serial.printf("TCP Receiving time %d us\n", (int)micros() - lTime);
                   i=0;
-                  Serial.println(bufferSize);
+                  //Serial.println(bufferSize);
                   //client.write(streamBuffer, 512);
                   if (jpeg.openRAM(streamBuffer, bufferSize, JPEGDraw)) {
                     Serial.printf("Image size: %d x %d, orientation: %d, bpp: %d\n", jpeg.getWidth(),
                     jpeg.getHeight(), jpeg.getOrientation(), jpeg.getBpp());
-                      lTime = micros();
+                      //lTime = micros();
                       if (jpeg.decode(0,0,0)) { // full sized decode
                         lTime = micros() - lTime;
-                        Serial.printf("full sized decode in %d us\n", (int)lTime);
+                        Serial.printf("Total time %d us\n", (int)lTime);
                       }
                       jpeg.close();
                     }
                     bufferSize=0;
-                  break;
+                 // break;
                   }
             }
         }

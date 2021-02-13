@@ -14,9 +14,11 @@
 #define LedStripCount 2  //LED条数
 #define BufferNum 2
 #define Div 320
+#define MaxStreamBuffer 10*1024
 int Frame = 0;
 byte Hall = 0;  //到达顶端的霍尔传感器代号
 uint16_t (*imgBuffer)[320][PixelCount];
+uint8_t *streamBuffer;
 
 //一些机制需要用到的全局变量
 JPEGDEC jpeg;
@@ -72,7 +74,9 @@ void setup()
      pinMode(35,INPUT); 
      Serial.begin(115200);
      if(imgBuffer = (uint16_t(*)[320][PixelCount]) calloc(PixelCount*Div*BufferNum,sizeof(uint16_t)))
-    Serial.println("Alloc memory OK");
+        Serial.println("Alloc IMG Memory OK");
+     if(streamBuffer = (uint8_t(*)) calloc(MaxStreamBuffer,sizeof(uint8_t)))
+        Serial.println("Alloc Stream Memory OK");   
      if(!SD_MMC.begin("/sdcard")){
         Serial.println("Card Mount Failed");
     }   
