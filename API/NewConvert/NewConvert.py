@@ -110,10 +110,16 @@ with window("Main"):
     add_label_text("##dir", source="directory", color=[128, 255, 255])
     add_checkbox("Gamma Correction",default_value=True,callback=gamma_switch)
     add_button("Go!",callback=start_convert,width=100,height=50)
+    add_text("Ctrl + Click to diretly edit:" , color=[200,150,255])
+    add_slider_int("single-sided LEDs",default_value=NUMPIXELS,max_value=200) 
+    add_slider_int("Divide",default_value=Div,max_value=1000)
+    add_slider_int("Center Brightness",default_value=Led0Bright,max_value=100) 
+    add_slider_int("Edge Brightness",default_value=Bright,max_value=100)    
     add_text("Author: Corebb" , color=[255,255,0])
     add_drawing("Drawing_1", width=256, height=256)
     add_same_line()
-    add_drawing("Drawing_2", width=256, height=256)    
+    add_drawing("Drawing_2", width=256, height=256)  
+     
     
 set_main_window_size(800, 800)  
 set_main_window_title("bbPOV-P Converter") 
