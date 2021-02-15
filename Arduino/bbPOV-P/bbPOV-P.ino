@@ -9,6 +9,8 @@
 #include "JPEGDEC.h"
 #include "soc/timer_group_struct.h"
 #include "soc/timer_group_reg.h"
+#include <ArduinoJson.h>
+#include "webpage.h"
 //显示相关
 #define PixelCount 80  //单边LED数量
 #define LedStripCount 2  //LED条数
@@ -18,7 +20,7 @@
 int Frame = 0;
 byte Hall = 0;  //到达顶端的霍尔传感器代号
 uint16_t (*imgBuffer)[320][PixelCount];
-uint8_t *streamBuffer;
+uint8_t streamBuffer[MaxStreamBuffer];
 
 //一些机制需要用到的全局变量
 JPEGDEC jpeg;
@@ -36,7 +38,9 @@ int spinstae = 1;
 volatile unsigned long rotTime, timeOld, timeNow, opeTime, spinTime;
 NeoPixelBus<DotStarBgrFeature, DotStarSpiMethod2> strip2(PixelCount);
 NeoPixelBus<DotStarBgrFeature, DotStarSpiMethod> strip(PixelCount);
-
+DynamicJsonDocument doc(4096);
+JsonArray avaliableMedia = doc.to<JsonArray>();
+    
 AsyncWebSocket ws("/ws");
 RgbColor black(0);
 
@@ -70,34 +74,51 @@ void IRAM_ATTR RotCount1(){
 
 void setup()
 {
+     pinMode(15, INPUT_PULLUP);
+     pinMode(2, INPUT_PULLUP);
+     pinMode(4, INPUT_PULLUP);
+     pinMode(12, INPUT_PULLUP);
+     pinMode(13, INPUT_PULLUP); 
      pinMode(34,INPUT);
      pinMode(35,INPUT); 
      Serial.begin(115200);
      if(imgBuffer = (uint16_t(*)[320][PixelCount]) calloc(PixelCount*Div*BufferNum,sizeof(uint16_t)))
         Serial.println("Alloc IMG Memory OK");
-     if(streamBuffer = (uint8_t(*)) calloc(MaxStreamBuffer,sizeof(uint8_t)))
-        Serial.println("Alloc Stream Memory OK");   
-     if(!SD_MMC.begin("/sdcard")){
+     if(!SD_MMC.begin("/sdcard",true)){
         Serial.println("Card Mount Failed");
     }   
+    /*
      WiFi.mode(WIFI_AP);
      WiFi.softAP("bbPOV-P");
       MDNS.begin("bbPOV");
-      MDNS.addService("bbPOV", "tcp", 80);
+      MDNS.addService("bbPOV", "tcp", 80);*/
+      WiFi.begin("Hollyshit_A", "00197633");
+
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+    
     strip.Begin();
     strip.Show();
     strip2.Begin(32,25,33,26);
     strip2.Show();
     long lTime;
 
-    root=SD_MMC.open("/bbPOV-P");
-    dir=root.openNextFile();  
-    while(!dir.isDirectory()){
-      dir=root.openNextFile();
-      if(!dir)
-        break;
-    }
-    
+    root=SD_MMC.open("/bbPOV-P"); 
+    while(true){
+      File entry = root.openNextFile();
+      if(!entry) break;
+      if(entry.isDirectory()){
+          avaliableMedia.add(String(entry.name()).substring(9));
+        }
+      }
+    dir=SD_MMC.open("/bbPOV-P/"+avaliableMedia[0].as<String>());
   if (jpeg.open("", myOpen, myClose, myRead, mySeek, JPEGDraw))
   {
     lTime = micros();
@@ -109,8 +130,7 @@ void setup()
     jpeg.close();
   }
   bufferRot=0;
-    attachInterrupt(35, RotCount0, FALLING );
-    attachInterrupt(34, RotCount1, FALLING );
+    
 
       xTaskCreatePinnedToCore(
     nextFile
@@ -123,7 +143,7 @@ void setup()
     xTaskCreatePinnedToCore(
     webloop
     ,  "webloop"
-    ,  1000  // Stack size
+    ,  5000  // Stack size
     ,  NULL
     ,  2 // Priority
     ,  NULL 
@@ -144,6 +164,8 @@ void loop() {
 } 
 void ledloop(void *pvParameters)
 {
+  attachInterrupt(35, RotCount0, FALLING );
+  attachInterrupt(34, RotCount1, FALLING );
   for (;;)
   {
     TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
@@ -207,8 +229,19 @@ void ledloop(void *pvParameters)
 void webloop(void *pvParameters)
 {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send(200, "text/plain", "Hi! I am bbPOV-P.");
+      request->send_P(200, "text/html", index_html);
     });
+  server.on("/avaliableMedia", HTTP_GET, [](AsyncWebServerRequest *request) {
+      String json;
+      serializeJson(doc, json);
+      request->send(200, "text/plain", json);
+    });
+  server.on("/changeMedia", HTTP_GET, [](AsyncWebServerRequest *request) {
+      int mediaID = request->getParam("id")->value().toInt();
+      Serial.println(mediaID);
+      dir=SD_MMC.open("/bbPOV-P/"+avaliableMedia[mediaID].as<String>());
+      request->send(200, "text/plain", "OK");
+    });      
     AsyncElegantOTA.begin(&server);    // Start ElegantOTA
     
     server.serveStatic("/", SD_MMC, "/");

@@ -14,7 +14,7 @@ Div = 320#1圈分割数
 Bright = 60 #輝度
 Led0Bright = 15 #中心LEDの輝度 [%]
 
-gif_file_name = "cat.gif"
+gif_file_name = "jellyfish.gif"
 im = Image.open(gif_file_name)
 print(im.is_animated)
 print(im.n_frames)
@@ -30,7 +30,7 @@ def polarConv(imgOrgin, frame):
     w = imgOrgin.width
  
     #画像縮小
-    imgRedu = imgOrgin.resize((math.floor((NUMPIXELS * 2 -1)/h *w), NUMPIXELS * 2 -1))
+    imgRedu = imgOrgin.resize((math.floor((NUMPIXELS * 2 -1)/h *w), NUMPIXELS * 2 -1)).rotate(180)
     #imgRedu.save(str(frame)+'.png')   #输出缩小后的原图像
     imgArray=np.array(imgRedu)
     #縮小画像中心座標
@@ -55,7 +55,7 @@ def polarConv(imgOrgin, frame):
                          wC - math.ceil(i * math.sin(2*math.pi/Div*j)), 2] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100)
             imgPolar.putpixel((i,j), (rP, gP, bP))
 
-    imgPolar.save(str(frame)+'.jpg',quality=90, optimize=True) #输出极坐标变换后的图像
+    imgPolar.save(str(frame)+'.jpg',quality=95, optimize=True) #输出极坐标变换后的图像
             
  
 

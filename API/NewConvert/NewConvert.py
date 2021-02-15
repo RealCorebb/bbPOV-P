@@ -11,12 +11,12 @@ from dearpygui.simple import *
 #配置
 NUMPIXELS = 80 #单边LED数量
 Div = 320 #1圈分割数
-Bright = 70 #輝度
+Bright = 60 #輝度
 Led0Bright = 15 #中心LEDの輝度 [%]
 last_time = time.time()
 
 #Global
-gammaCorrection = True
+gammaCorrection = False
 identity = np.arange(256, dtype = np.dtype('uint8'))
 gammatable = np.array([0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
     1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   2,   2,   2,   2,   2,   2,
@@ -42,21 +42,25 @@ def polarConv(imgOrgin,outputName):
     global gammaCorrection
     h = imgOrgin.shape[0] #帧尺寸
     w = imgOrgin.shape[1]
-    #画像縮小
-    imgRedu = cv2.resize(imgOrgin,(math.floor((NUMPIXELS * 2 -1)/h *w), NUMPIXELS * 2 -1)) 
+    #画像縮小 
+    imgRedu = cv2.resize(imgOrgin,(math.floor((NUMPIXELS * 2 -1)/h *w), NUMPIXELS * 2 -1))
+    kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+    imgRedu = cv2.filter2D(imgRedu, -1, kernel)
     #顺时针旋转90度 因为下一步的极坐标转换的0度是正东方向，而我们的POV正北方向为0度
     imgRedu = cv2.rotate(imgRedu,cv2.ROTATE_90_CLOCKWISE)  
     polar_image = cv2.warpPolar(imgRedu,(NUMPIXELS , Div ), (imgRedu.shape[1]/2,imgRedu.shape[0]/2) ,min(imgRedu.shape[0], imgRedu.shape[1]) / 2, 0)
-    hsv = cv2.cvtColor(polar_image,cv2.COLOR_BGR2HSV)
-    for i in range(NUMPIXELS):                #亮度处理
-        hsv[:,i,2] = hsv[:,i,2] * ((Led0Bright + i * ((Bright-Led0Bright)/NUMPIXELS)) / 100)
-    final = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    for i in range(NUMPIXELS):  #亮度处理
+         polar_image[:,i,0] = polar_image[:,i,0] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100
+         polar_image[:,i,1] = polar_image[:,i,1] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100 
+         polar_image[:,i,2] = polar_image[:,i,2] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100 
+        #polar_image[:,i,2] = hsv[:,i,2] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100
     if(gammaCorrection):
-        final = cv2.LUT(final, lut)
-    cv2.imwrite(outputName+'.jpg',final,[int(cv2.IMWRITE_JPEG_QUALITY), 95])
+        polar_image = cv2.LUT(polar_image, lut)
+    cv2.imwrite(outputName+'.jpg',polar_image,[int(cv2.IMWRITE_JPEG_OPTIMIZE), True])
 frameNum = 0
 def start_convert():
     global frameNum
+    startTime = time.time()
     if (media_path.endswith(".jpg") or media_path.endswith(".png") or media_path.endswith(".bmp")):
         frame = cv2.imread(media_path)
         polarConv(frame,save_path+'\\'+str(1))
@@ -69,6 +73,7 @@ def start_convert():
                 break
             frameNum=frameNum+1
             polarConv(frame,save_path+'\\'+str(frameNum))
+    print(time.time() - startTime)        
            
 
 def file_picker(sender, data):
@@ -108,7 +113,7 @@ with window("Main"):
     add_text("Output Folder: " , color=[0, 255, 255])
     add_same_line()
     add_label_text("##dir", source="directory", color=[128, 255, 255])
-    add_checkbox("Gamma Correction",default_value=True,callback=gamma_switch)
+    add_checkbox("Gamma Correction",default_value=gammaCorrection,callback=gamma_switch)
     add_button("Go!",callback=start_convert,width=100,height=50)
     add_text("Ctrl + Click to diretly edit:" , color=[200,150,255])
     add_slider_int("single-sided LEDs",default_value=NUMPIXELS,max_value=200) 
@@ -120,10 +125,19 @@ with window("Main"):
     add_same_line()
     add_drawing("Drawing_2", width=256, height=256)  
      
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
     
 set_main_window_size(800, 800)  
 set_main_window_title("bbPOV-P Converter") 
-draw_image("Drawing_1", './data/Corebb.jpg', [0, 0], pmax=[256,256], uv_min=[0, 0], uv_max=[1, 1], tag="image")
-draw_image("Drawing_2", './data/logo.jpg', [0, 0], pmax=[256,256], uv_min=[0, 0], uv_max=[1, 1], tag="image2")
+draw_image("Drawing_1", resource_path('data/Corebb.jpg'), [0, 0], pmax=[256,256], uv_min=[0, 0], uv_max=[1, 1], tag="image")
+draw_image("Drawing_2", resource_path('data/logo.jpg'), [0, 0], pmax=[256,256], uv_min=[0, 0], uv_max=[1, 1], tag="image2")
 set_theme("Cherry")
 start_dearpygui(primary_window="Main")

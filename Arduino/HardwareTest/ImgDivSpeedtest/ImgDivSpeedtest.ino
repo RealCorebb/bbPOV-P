@@ -65,7 +65,7 @@ void RotCountCommon(){
   
 void setup()
 {
-     pinMode(15, INPUT_PULLUP);
+  pinMode(15, INPUT_PULLUP);
   pinMode(2, INPUT_PULLUP);
   pinMode(4, INPUT_PULLUP);
   pinMode(12, INPUT_PULLUP);
