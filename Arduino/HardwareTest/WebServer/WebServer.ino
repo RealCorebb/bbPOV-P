@@ -11,6 +11,14 @@
 #include <ESP8266mDNS.h>
 #endif
 #include <ESPAsyncWebServer.h>
+#include <JPEGDEC.h>
+JPEGDEC jpeg;
+
+int JPEGDraw(JPEGDRAW *pDraw)
+{
+  // do nothing
+  return 1; // continue decode
+} 
 
 // SKETCH BEGIN
 AsyncWebServer server(80);
@@ -90,8 +98,8 @@ void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventT
 }
 
 
-const char* ssid = "xx";
-const char* password = "xx";
+const char* ssid = "Hollyshit_A";
+const char* password = "00197633";
 const char * hostName = "esp-async";
 const char* http_username = "admin";
 const char* http_password = "admin";
@@ -148,50 +156,7 @@ void setup(){
   server.serveStatic("/", SD_MMC, "/").setDefaultFile("index.htm");
 
   server.onNotFound([](AsyncWebServerRequest *request){
-    Serial.printf("NOT_FOUND: ");
-    if(request->method() == HTTP_GET)
-      Serial.printf("GET");
-    else if(request->method() == HTTP_POST)
-      Serial.printf("POST");
-    else if(request->method() == HTTP_DELETE)
-      Serial.printf("DELETE");
-    else if(request->method() == HTTP_PUT)
-      Serial.printf("PUT");
-    else if(request->method() == HTTP_PATCH)
-      Serial.printf("PATCH");
-    else if(request->method() == HTTP_HEAD)
-      Serial.printf("HEAD");
-    else if(request->method() == HTTP_OPTIONS)
-      Serial.printf("OPTIONS");
-    else
-      Serial.printf("UNKNOWN");
-    Serial.printf(" http://%s%s\n", request->host().c_str(), request->url().c_str());
 
-    if(request->contentLength()){
-      Serial.printf("_CONTENT_TYPE: %s\n", request->contentType().c_str());
-      Serial.printf("_CONTENT_LENGTH: %u\n", request->contentLength());
-    }
-
-    int headers = request->headers();
-    int i;
-    for(i=0;i<headers;i++){
-      AsyncWebHeader* h = request->getHeader(i);
-      Serial.printf("_HEADER[%s]: %s\n", h->name().c_str(), h->value().c_str());
-    }
-
-    int params = request->params();
-    for(i=0;i<params;i++){
-      AsyncWebParameter* p = request->getParam(i);
-      if(p->isFile()){
-        Serial.printf("_FILE[%s]: %s, size: %u\n", p->name().c_str(), p->value().c_str(), p->size());
-      } else if(p->isPost()){
-        Serial.printf("_POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
-      } else {
-        Serial.printf("_GET[%s]: %s\n", p->name().c_str(), p->value().c_str());
-      }
-    }
-
-    request->send(404);
   });
   server.onFileUpload(handleUpload);
   server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
@@ -208,21 +173,39 @@ void loop(){
   ArduinoOTA.handle();
   ws.cleanupClients();
 }
-
+uint8_t streamBuffer[10*1024];
+long lTime;
 void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
   if(!index){
+    lTime=micros();
     Serial.println((String)"UploadStart: " + filename);
     // open the file on first call and store the file handle in the request object
-    request->_tempFile = SD_MMC.open("/bbPOV-P/Stream/"+filename, "w");
+    //request->_tempFile = SD_MMC.open("/bbPOV-P/Stream/"+filename, "w");
   }
   if(len) {
+    //Serial.print("index:");
+    //Serial.println(index);
+   // Serial.print("len:");
+   // Serial.println(len);
+    memcpy(&streamBuffer[index],data,len);
     // stream the incoming chunk to the opened file
-    request->_tempFile.write(data,len);
+  //  request->_tempFile.write(data,len);
   }
   if(final){
-    Serial.println((String)"UploadEnd: " + filename + ",size: " + index+len);
+    Serial.print("All length:");
+    Serial.println(index+len);
+    if (jpeg.openRAM(streamBuffer, index+len, JPEGDraw)) {
+                      
+                    Serial.printf("Image size: %d x %d, orientation: %d, bpp: %d\n", jpeg.getWidth(),
+                    jpeg.getHeight(), jpeg.getOrientation(), jpeg.getBpp());
+                      if (jpeg.decode(0,0,0)) { // full sized decode
+                        lTime = micros() - lTime;
+                        Serial.printf("Total time %d us\n", (int)lTime);
+                      }
+                      jpeg.close();
+     }
     // close the file handle as the upload is now done
-    request->_tempFile.close();
-    request->send(200);
+    //request->_tempFile.close();
+   // request->send(200);
   }
 }

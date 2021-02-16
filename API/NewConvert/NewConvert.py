@@ -44,8 +44,6 @@ def polarConv(imgOrgin,outputName):
     w = imgOrgin.shape[1]
     #画像縮小 
     imgRedu = cv2.resize(imgOrgin,(math.floor((NUMPIXELS * 2 -1)/h *w), NUMPIXELS * 2 -1))
-    kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-    imgRedu = cv2.filter2D(imgRedu, -1, kernel)
     #顺时针旋转90度 因为下一步的极坐标转换的0度是正东方向，而我们的POV正北方向为0度
     imgRedu = cv2.rotate(imgRedu,cv2.ROTATE_90_CLOCKWISE)  
     polar_image = cv2.warpPolar(imgRedu,(NUMPIXELS , Div ), (imgRedu.shape[1]/2,imgRedu.shape[0]/2) ,min(imgRedu.shape[0], imgRedu.shape[1]) / 2, 0)
@@ -63,16 +61,16 @@ def start_convert():
     startTime = time.time()
     if (media_path.endswith(".jpg") or media_path.endswith(".png") or media_path.endswith(".bmp")):
         frame = cv2.imread(media_path)
-        polarConv(frame,save_path+'\\'+str(1))
+        polarConv(frame,save_path+'\\'+str(0))
     else:
         media = cv2.VideoCapture(media_path)
         while True:
             ret, frame = media.read()
             if ret == False:
                 frameNum = 0
-                break
-            frameNum=frameNum+1
+                break  
             polarConv(frame,save_path+'\\'+str(frameNum))
+            frameNum=frameNum+1
     print(time.time() - startTime)        
            
 

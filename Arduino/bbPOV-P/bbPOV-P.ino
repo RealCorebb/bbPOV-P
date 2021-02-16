@@ -17,6 +17,9 @@
 #define BufferNum 2
 #define Div 320
 #define MaxStreamBuffer 10*1024
+#define OFFSET_34 0
+#define OFFSET_35 0
+
 int Frame = 0;
 byte Hall = 0;  //到达顶端的霍尔传感器代号
 uint16_t (*imgBuffer)[320][PixelCount];
@@ -46,31 +49,42 @@ RgbColor black(0);
 
 
 void IRAM_ATTR RotCountCommon(){
-  
-  static unsigned long last_interrupt_time = 0;
-  unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
-    if (interrupt_time - last_interrupt_time > 20)
-    {    
-      numDiv=0;
+      bufferRot++;
+      if(bufferRot>=BufferNum-1) bufferRot=0;   
       timeNow = micros();
       rotTime = timeNow - timeOld;
       timeOld = timeNow;
-      bufferRot++;
-      if(bufferRot>=BufferNum-1) bufferRot=0;
       xTaskNotifyGive( nextFileHandle );
     //  Serial.println("RotCount");
+}
+  
+void IRAM_ATTR RotCount0(){
+    static unsigned long last_interrupt_time = 0;
+    unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
+    if (interrupt_time - last_interrupt_time > 20)
+    {  
+      int numDivCount=0 + OFFSET_35;                     //为什么要这样做？因为LED显示是在另一个线程，我要保证numDiv所要的值是最终值才将其赋值，不然可能还没执行判断就被LED的线程读取了值（虽然我不知道这样做有没有用 :( ）
+      if(numDivCount<0) numDivCount = Div - 1 + numDivCount;
+      numDiv = numDivCount;
+      Hall=0;
+      RotCountCommon();
+    }
+   last_interrupt_time = interrupt_time;
+  }
+void IRAM_ATTR RotCount1(){
+ static unsigned long last_interrupt_time = 0;
+  unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
+    if (interrupt_time - last_interrupt_time > 20)
+    {  
+      int numDivCount=0 + OFFSET_34;
+      if(numDivCount<0) numDivCount = Div - 1 + numDivCount;
+      numDiv = numDivCount;
+      Hall=1;
+      RotCountCommon();
     }
    last_interrupt_time = interrupt_time;
   }
   
-void IRAM_ATTR RotCount0(){
-    Hall=0;
-    RotCountCommon();
-  }
-void IRAM_ATTR RotCount1(){
-    Hall=1;
-    RotCountCommon();
-  }
 
 void setup()
 {
@@ -130,7 +144,8 @@ void setup()
     jpeg.close();
   }
   bufferRot=0;
-    
+  attachInterrupt(35, RotCount0, FALLING );
+  attachInterrupt(34, RotCount1, FALLING );  
 
       xTaskCreatePinnedToCore(
     nextFile
@@ -164,8 +179,6 @@ void loop() {
 } 
 void ledloop(void *pvParameters)
 {
-  attachInterrupt(35, RotCount0, FALLING );
-  attachInterrupt(34, RotCount1, FALLING );
   for (;;)
   {
     TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
