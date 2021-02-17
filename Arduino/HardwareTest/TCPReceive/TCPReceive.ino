@@ -1,10 +1,11 @@
+
 #include <WiFi.h>
 
 const char *ssid = "Hollyshit_A";
 const char *password = "00197633";
 
 WiFiServer server; //声明服务器对象
-uint8_t *streamBuffer;
+
 #include <JPEGDEC.h>
 JPEGDEC jpeg;
 
@@ -20,6 +21,7 @@ void setup()
     Serial.println();
 
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false); //关闭STA模式下wifi休眠，提高响应速度
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED)
     {
@@ -29,14 +31,11 @@ void setup()
     Serial.println("Connected");
     Serial.print("IP Address:");
     Serial.println(WiFi.localIP());
-    server.begin(22333); //服务器启动监听端口号22333
 
-    if(streamBuffer = (uint8_t(*)) calloc(10*1024,sizeof(uint8_t)))
-    Serial.println("Alloc memory OK");
+    server.begin(22333); //服务器启动监听端口号22333
 }
 
-long lTime;
-int bufferSize=0;
+uint8_t streamBuffer[15*1024];
 void loop()
 {
     WiFiClient client = server.available(); //尝试建立客户对象
@@ -47,31 +46,17 @@ void loop()
         {
             if (client.available()) //如果有可读数据
             {
-                if(bufferSize==0) lTime = micros();
-                Serial.println(bufferSize);
-                int Received = client.read(&streamBuffer[bufferSize],512);
-               // Serial.println(Received);
-                bufferSize+=Received;
-               // Serial.println("memcpy Done");
-                if(streamBuffer[bufferSize-2]==0xFF && streamBuffer[bufferSize-1]==0xD9){   //JPG结尾
-                  Serial.println("END");
-                  //Serial.printf("TCP Receiving time %d us\n", (int)micros() - lTime);
-                  //Serial.println(bufferSize);
-                  //client.write(streamBuffer, 512);
-                  /*
-                  if (jpeg.openRAM(streamBuffer, bufferSize, JPEGDraw)) {
-                      
+                String buff = client.readStringUntil('\r');
+                int len = buff.toInt();
+                client.readBytes(streamBuffer,len);                    
+                if(streamBuffer[len-2]==0xFF && streamBuffer[len-1]==0xD9){   //JPG结尾
+                  if (jpeg.openRAM(streamBuffer, len, JPEGDraw)) {
                     Serial.printf("Image size: %d x %d, orientation: %d, bpp: %d\n", jpeg.getWidth(),
                     jpeg.getHeight(), jpeg.getOrientation(), jpeg.getBpp());
-                      //lTime = micros();
                       if (jpeg.decode(0,0,0)) { // full sized decode
-                        lTime = micros() - lTime;
-                       // Serial.printf("Total time %d us\n", (int)lTime);
                       }
                       jpeg.close();
-                    }*/
-                    bufferSize=0;
-                 // break;
+                    }
                   }
             }
         }

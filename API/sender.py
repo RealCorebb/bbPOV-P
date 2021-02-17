@@ -19,7 +19,7 @@ Div = 320 #1圈分割数
 Bright = 70 #輝度
 Led0Bright = 15 #中心LEDの輝度 [%]
 last_time = time.time()
-MAX_FPS=20
+MAX_FPS=30
 MIN_FRAME_TIME=1/MAX_FPS
 
 #Global
@@ -59,8 +59,8 @@ def polarConv(imgOrgin):
     ret,img_encode = cv2.imencode('.jpg',polar_image,[int(cv2.IMWRITE_JPEG_OPTIMIZE)])
     data = np.array(img_encode)
     stringData = data.tobytes()
-    #s.send(str.encode(str(len(stringData)).ljust(16)));
-    
+    print(str(len(stringData)))
+    s.send(str.encode(str(len(stringData)).ljust(5)+'\r'));  
     s.sendall(stringData)
 def capture():
     global posX

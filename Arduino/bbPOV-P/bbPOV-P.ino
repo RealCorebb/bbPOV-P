@@ -48,43 +48,23 @@ AsyncWebSocket ws("/ws");
 RgbColor black(0);
 
 
-void IRAM_ATTR RotCountCommon(){
+void IRAM_ATTR RotCount(){
+static unsigned long last_interrupt_time = 0;
+    unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
+    if (interrupt_time - last_interrupt_time > 20)
+    {  
+      numDiv = 0;
       bufferRot++;
-      if(bufferRot>=BufferNum-1) bufferRot=0;   
+      if(bufferRot>=BufferNum-1) bufferRot=0;
       timeNow = micros();
       rotTime = timeNow - timeOld;
       timeOld = timeNow;
       xTaskNotifyGive( nextFileHandle );
-    //  Serial.println("RotCount");
+  }
+  last_interrupt_time = interrupt_time;
 }
   
-void IRAM_ATTR RotCount0(){
-    static unsigned long last_interrupt_time = 0;
-    unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
-    if (interrupt_time - last_interrupt_time > 20)
-    {  
-      int numDivCount=0 + OFFSET_35;                     //为什么要这样做？因为LED显示是在另一个线程，我要保证numDiv所要的值是最终值才将其赋值，不然可能还没执行判断就被LED的线程读取了值（虽然我不知道这样做有没有用 :( ）
-      if(numDivCount<0) numDivCount = Div - 1 + numDivCount;
-      numDiv = numDivCount;
-      Hall=0;
-      RotCountCommon();
-    }
-   last_interrupt_time = interrupt_time;
-  }
-void IRAM_ATTR RotCount1(){
- static unsigned long last_interrupt_time = 0;
-  unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
-    if (interrupt_time - last_interrupt_time > 20)
-    {  
-      int numDivCount=0 + OFFSET_34;
-      if(numDivCount<0) numDivCount = Div - 1 + numDivCount;
-      numDiv = numDivCount;
-      Hall=1;
-      RotCountCommon();
-    }
-   last_interrupt_time = interrupt_time;
-  }
-  
+
 
 void setup()
 {
@@ -144,8 +124,7 @@ void setup()
     jpeg.close();
   }
   bufferRot=0;
-  attachInterrupt(35, RotCount0, FALLING );
-  attachInterrupt(34, RotCount1, FALLING );  
+  attachInterrupt(35, RotCount, FALLING );
 
       xTaskCreatePinnedToCore(
     nextFile
@@ -184,50 +163,40 @@ void ledloop(void *pvParameters)
     TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
     TIMERG0.wdt_feed=1;
     TIMERG0.wdt_wprotect=0; 
-        if(stateDiv == 1 && micros() - timeOld > (rotTime / (Div/LedStripCount)) * (numDiv)){
+        if(stateDiv == 1 && micros() - timeOld > (rotTime / Div) * (numDiv)){
         stateDiv = 0;
       }
-      if(stateDiv == 0 && micros() - timeOld < (rotTime / (Div/LedStripCount)) * (numDiv + 1 )){
+      if(stateDiv == 0 && micros() - timeOld < (rotTime / Div) * (numDiv + 1 )){
         stateDiv = 1;
       //  long donetime=micros();
-        switch(Hall){
-            case 0:
-             // strip.ClearTo(black);
-             // strip2.ClearTo(black);
-             // long nowtime=micros();
+        int showNumDiv = numDiv;
+        if(showNumDiv<Div/LedStripCount){
               for(int i = 0; i < PixelCount; i++){
-                uint16_t color = imgBuffer[bufferRot][numDiv][i];
-                uint16_t color2 = imgBuffer[bufferRot][numDiv+Div/LedStripCount][i];
+                uint16_t color = imgBuffer[bufferRot][showNumDiv][i];
+                uint16_t color2 = imgBuffer[bufferRot][showNumDiv+Div/LedStripCount][i];
                 strip.SetPixelColor(i, RgbColor(uint8_t((color & 0xF800)>>8),uint8_t((color & 0x07C0)>>3),uint8_t((color & 0x001F)<<3)));
                 strip2.SetPixelColor(i, RgbColor(uint8_t((color2 & 0xF800)>>8),uint8_t((color2 & 0x07C0)>>3),uint8_t((color2 & 0x001F)<<3)));
               }
-             // Serial.printf("FUcking setpixel tiime:%d",int(micros()-nowtime));
-            //  long stripshowtime=micros();
-              strip.Show();
-              strip2.Show();  
-            //  stripshowtime=micros()-stripshowtime;
-             // Serial.printf("FUcking stripshow tiime:%d",int(stripshowtime));  
-              break;
-              
-            case 1:
-              //strip.ClearTo(black);
-             // strip2.ClearTo(black);
-              for(int i = 0; i < PixelCount; i++){
-                uint16_t color = imgBuffer[bufferRot][numDiv][i];
-                uint16_t color2 = imgBuffer[bufferRot][numDiv+Div/LedStripCount][i];
-                strip2.SetPixelColor(i, RgbColor(uint8_t((color & 0xF800)>>8),uint8_t((color & 0x07C0)>>3),uint8_t((color & 0x001F)<<3)));
-                strip.SetPixelColor(i, RgbColor(uint8_t((color2 & 0xF800)>>8),uint8_t((color2 & 0x07C0)>>3),uint8_t((color2 & 0x001F)<<3)));
-             }
-              strip2.Show();  
+        }
+        else{
+          for(int i = 0; i < PixelCount; i++){
+                uint16_t color = imgBuffer[bufferRot][showNumDiv][i];
+                uint16_t color2 = imgBuffer[bufferRot][showNumDiv-Div/LedStripCount][i];
+                strip.SetPixelColor(i, RgbColor(uint8_t((color & 0xF800)>>8),uint8_t((color & 0x07C0)>>3),uint8_t((color & 0x001F)<<3)));
+                strip2.SetPixelColor(i, RgbColor(uint8_t((color2 & 0xF800)>>8),uint8_t((color2 & 0x07C0)>>3),uint8_t((color2 & 0x001F)<<3)));
+              }
+          }
               strip.Show();  
-              break;
-          }  
+              strip2.Show();  
               
         numDiv++;
-        if(numDiv >= (Div / LedStripCount)) numDiv = 0;
-       // donetime=micros()-donetime;
-        //Serial.printf("FUcking done tiime:%d",int(donetime));
+        if(numDiv == (Div / LedStripCount)){
+          bufferRot++;
+          if(bufferRot>=BufferNum-1) bufferRot=0;
+          xTaskNotifyGive( nextFileHandle );
         }
+        if(numDiv >= Div) numDiv=0;    
+        
         /*
         if(stateDiv == 0 ){
           
@@ -237,6 +206,7 @@ void ledloop(void *pvParameters)
           strip2.Show();
           }*/
   }
+}
 }
 
 void webloop(void *pvParameters)
