@@ -21,7 +21,7 @@ void setup()
     Serial.println();
 
     WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false); //关闭STA模式下wifi休眠，提高响应速度
+   // WiFi.setSleep(false); //关闭STA模式下wifi休眠，提高响应速度
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED)
     {

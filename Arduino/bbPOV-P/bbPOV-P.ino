@@ -1,7 +1,7 @@
 #include <WiFi.h>
 #include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-#include <AsyncElegantOTA.h>
+#include <WebServer.h>
+#include <ElegantOTA.h>
 #include <NeoPixelBus.h>
 #include <SPI.h>
 #include <ESPmDNS.h>
@@ -32,8 +32,7 @@ File dir;
 File myfile;
 TaskHandle_t nextFileHandle; 
 int bufferRot=-1;
-
-AsyncWebServer server(80);
+WebServer server(80);
 int numRot= 0;
 int numDiv = 0;
 int stateDiv = 0;
@@ -43,8 +42,9 @@ NeoPixelBus<DotStarBgrFeature, DotStarSpiMethod2> strip2(PixelCount);
 NeoPixelBus<DotStarBgrFeature, DotStarSpiMethod> strip(PixelCount);
 DynamicJsonDocument doc(4096);
 JsonArray avaliableMedia = doc.to<JsonArray>();
-    
-AsyncWebSocket ws("/ws");
+int displayMode = 0;
+WiFiServer tcpStream; //声明服务器对象
+
 RgbColor black(0);
 
 
@@ -78,7 +78,7 @@ void setup()
      Serial.begin(115200);
      if(imgBuffer = (uint16_t(*)[320][PixelCount]) calloc(PixelCount*Div*BufferNum,sizeof(uint16_t)))
         Serial.println("Alloc IMG Memory OK");
-     if(!SD_MMC.begin("/sdcard",true)){
+     if(!SD_MMC.begin("/sdcard")){
         Serial.println("Card Mount Failed");
     }   
     /*
@@ -97,7 +97,24 @@ void setup()
     Serial.println("WiFi connected");
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
-    
+      server.on("/", []() {
+      server.send_P(200, "text/html", index_html);
+    });
+  server.on("/avaliableMedia", []() {
+      String json;
+      serializeJson(doc, json);
+      server.send(200, "text/plain", json);
+    });
+  server.on("/changeMedia",[]() {
+      int mediaID = server.arg(0).toInt();
+      Serial.println(mediaID);
+      dir=SD_MMC.open("/bbPOV-P/"+avaliableMedia[mediaID].as<String>());
+      server.send(200, "text/plain", "OK");
+    });
+    ElegantOTA.begin(&server);      
+    server.begin();   
+    Serial.println("HTTP server started");
+    tcpStream.begin(22333); //服务器启动监听端口号22333
     strip.Begin();
     strip.Show();
     strip2.Begin(32,25,33,26);
@@ -134,36 +151,27 @@ void setup()
     ,  4  // Priority
     ,  &nextFileHandle 
     ,  0); 
-    xTaskCreatePinnedToCore(
+        xTaskCreatePinnedToCore(
     webloop
     ,  "webloop"
     ,  5000  // Stack size
     ,  NULL
     ,  2 // Priority
     ,  NULL 
-    ,  0);   
-
-    xTaskCreatePinnedToCore(
-    ledloop
-    ,  "ledloop"
-    ,  1000  // Stack size
+    ,  0); 
+        xTaskCreatePinnedToCore(
+    handleStream
+    ,  "handleStream"
+    ,  5000  // Stack size
     ,  NULL
-    ,  5 // Priority
+    ,  4  // Priority
     ,  NULL 
-    ,  1);
-    Serial.println("Setup Done");              
+    ,  0); 
+    Serial.println("Setup Done");
+    vTaskPrioritySet(NULL, 5);              
 }
 void loop() { 
-   // AsyncElegantOTA.loop();
-} 
-void ledloop(void *pvParameters)
-{
-  for (;;)
-  {
-    TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
-    TIMERG0.wdt_feed=1;
-    TIMERG0.wdt_wprotect=0; 
-        if(stateDiv == 1 && micros() - timeOld > (rotTime / Div) * (numDiv)){
+  if(stateDiv == 1 && micros() - timeOld > (rotTime / Div) * (numDiv)){
         stateDiv = 0;
       }
       if(stateDiv == 0 && micros() - timeOld < (rotTime / Div) * (numDiv + 1 )){
@@ -206,31 +214,17 @@ void ledloop(void *pvParameters)
           strip2.Show();
           }*/
   }
-}
-}
+} 
 
 void webloop(void *pvParameters)
 {
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send_P(200, "text/html", index_html);
-    });
-  server.on("/avaliableMedia", HTTP_GET, [](AsyncWebServerRequest *request) {
-      String json;
-      serializeJson(doc, json);
-      request->send(200, "text/plain", json);
-    });
-  server.on("/changeMedia", HTTP_GET, [](AsyncWebServerRequest *request) {
-      int mediaID = request->getParam("id")->value().toInt();
-      Serial.println(mediaID);
-      dir=SD_MMC.open("/bbPOV-P/"+avaliableMedia[mediaID].as<String>());
-      request->send(200, "text/plain", "OK");
-    });      
-    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
-    
-    server.serveStatic("/", SD_MMC, "/");
-    server.begin(); 
-    Serial.println("HTTP server started");
-    vTaskDelete(NULL);
+  for (;;)
+  {
+    TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
+    TIMERG0.wdt_feed=1;
+    TIMERG0.wdt_wprotect=0;
+    server.handleClient();
+  }
 }
 
  
@@ -276,17 +270,59 @@ void nextFile(void *pvParameters){
   TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
   TIMERG0.wdt_feed=1;
   TIMERG0.wdt_wprotect=0;
-  ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-  //long lTime=micros();
-    if (jpeg.open("", myOpen, myClose, myRead, mySeek, JPEGDraw))
-  {
-
-    if (jpeg.decode(0,0,0))
+  if(displayMode == 0){
+    ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+    //long lTime=micros();
+      if (jpeg.open("", myOpen, myClose, myRead, mySeek, JPEGDraw))
     {
-     // lTime = micros() - lTime;
-     // Serial.printf("Successfully decoded image in %d us\n", (int)lTime);
+  
+      if (jpeg.decode(0,0,0))
+      {
+       // lTime = micros() - lTime;
+       // Serial.printf("Successfully decoded image in %d us\n", (int)lTime);
+      }
+      jpeg.close();
     }
-    jpeg.close();
   }
+}
+}
+
+void handleStream(void *pvParameters){
+  for (;;)
+  {
+  TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
+  TIMERG0.wdt_feed=1;
+  TIMERG0.wdt_wprotect=0;
+        WiFiClient client = tcpStream.available(); //尝试建立客户对象
+    if (client) //如果当前客户可用
+    {
+        displayMode = 1;
+        Serial.println("[Client connected]");
+        while (client.connected()) //如果客户端处于连接状态
+        {
+          TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
+          TIMERG0.wdt_feed=1;
+          TIMERG0.wdt_wprotect=0;
+            if (client.available()) //如果有可读数据
+            {
+                String buff = client.readStringUntil('\r');
+                int len = buff.toInt();
+                client.readBytes(streamBuffer,len);                    
+                if(streamBuffer[len-2]==0xFF && streamBuffer[len-1]==0xD9){   //JPG结尾
+                  
+                  if (jpeg.openRAM(streamBuffer, len, JPEGDraw)) {
+                    //Serial.printf("Image size: %d x %d, orientation: %d, bpp: %d\n", jpeg.getWidth(),
+                    //jpeg.getHeight(), jpeg.getOrientation(), jpeg.getBpp());
+                      if (jpeg.decode(0,0,0)) { // full sized decode
+                      }
+                      jpeg.close();
+                    }
+                  }
+            }
+        }
+      displayMode = 0;
+      //  client.stop(); //结束当前连接:
+      //  Serial.println("[Client disconnected]");
+    }
 }
 }

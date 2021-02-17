@@ -16,10 +16,10 @@ import requests
 #配置
 NUMPIXELS = 80 #单边LED数量
 Div = 320 #1圈分割数
-Bright = 70 #輝度
+Bright = 50 #輝度
 Led0Bright = 15 #中心LEDの輝度 [%]
 last_time = time.time()
-MAX_FPS=30
+MAX_FPS=15
 MIN_FRAME_TIME=1/MAX_FPS
 
 #Global
@@ -28,7 +28,7 @@ posX = 0
 posY = 0
 posX2 = 160
 posY2 = 160
-TCP_IP = '10.0.0.208'
+TCP_IP = '10.0.0.212'
 TCP_PORT = 22333
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -56,7 +56,7 @@ def polarConv(imgOrgin):
          polar_image[:,i,2] = polar_image[:,i,2] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100 
         #polar_image[:,i,2] = hsv[:,i,2] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100
     #cv2.imwrite(outputName+'.jpg',polar_image,[int(cv2.IMWRITE_JPEG_OPTIMIZE), True])
-    ret,img_encode = cv2.imencode('.jpg',polar_image,[int(cv2.IMWRITE_JPEG_OPTIMIZE)])
+    ret,img_encode = cv2.imencode('.jpg',polar_image,[int(cv2.IMWRITE_JPEG_QUALITY), 90]+[int(cv2.IMWRITE_JPEG_OPTIMIZE), True])
     data = np.array(img_encode)
     stringData = data.tobytes()
     print(str(len(stringData)))
