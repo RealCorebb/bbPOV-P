@@ -1,36 +1,41 @@
-_t#include <WiFi.h>
-#include <WiFiMulti.h>
-WiFiMulti WiFiMulti;
+#include <Ticker.h>
+Ticker hallHit;
+
+#include <WiFi.h>
 #include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-#include <AsyncElegantOTA.h>
+#include <WebServer.h>
+#include <ElegantOTA.h>
 #include <NeoPixelBus.h>
 #include <SPI.h>
 #include <ESPmDNS.h>
 #include "SD_MMC.h"
 #include "JPEGDEC.h"
-#include <Ticker.h>
 #include "soc/timer_group_struct.h"
 #include "soc/timer_group_reg.h"
+#include <ArduinoJson.h>
+#include "webpage.h"
 //显示相关
 #define PixelCount 80  //单边LED数量
 #define LedStripCount 2  //LED条数
 #define BufferNum 2
+#define Div 320
+#define MaxStreamBuffer 10*1024
+#define OFFSET_34 0
+#define OFFSET_35 0
+
 int Frame = 0;
 byte Hall = 0;  //到达顶端的霍尔传感器代号
-int Div = 320;
 uint16_t (*imgBuffer)[320][PixelCount];
+uint8_t streamBuffer[MaxStreamBuffer];
 
 //一些机制需要用到的全局变量
-Ticker hallHit;
 JPEGDEC jpeg;
 File root;
 File dir;
 File myfile;
 TaskHandle_t nextFileHandle; 
 int bufferRot=-1;
-
-AsyncWebServer server(80);
+WebServer server(80);
 int numRot= 0;
 int numDiv = 0;
 int stateDiv = 0;
@@ -38,84 +43,102 @@ int spinstae = 1;
 volatile unsigned long rotTime, timeOld, timeNow, opeTime, spinTime;
 NeoPixelBus<DotStarBgrFeature, DotStarSpiMethod2> strip2(PixelCount);
 NeoPixelBus<DotStarBgrFeature, DotStarSpiMethod> strip(PixelCount);
-//Adafruit_DotStar_VSPI stripA(PixelCount,DOTSTAR_BRG);
-//CRGB leds[PixelCount];
+DynamicJsonDocument doc(4096);
+JsonArray avaliableMedia = doc.to<JsonArray>();
+int displayMode = 0;
+WiFiServer tcpStream; //声明服务器对象
+WiFiClient client;
 
-AsyncWebSocket ws("/ws");
 RgbColor black(0);
 
 
-void RotCountCommon(){
-  
-  static unsigned long last_interrupt_time = 0;
-  unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
+void IRAM_ATTR RotCount(){
+static unsigned long last_interrupt_time = 0;
+    unsigned long interrupt_time = millis();            //deBounce,as the signal not stable sometimes 去抖动
     if (interrupt_time - last_interrupt_time > 20)
-    {    
-      numDiv=0;
+    {  
+      numDiv = 0;
+      bufferRot++;
+      if(bufferRot>=BufferNum-1) bufferRot=0;
       timeNow = micros();
       rotTime = timeNow - timeOld;
       timeOld = timeNow;
-      bufferRot++;
-      if(bufferRot>=BufferNum-1) bufferRot=0;
+      if (client) //如果当前客户可用
+      {
+        client.print("N");
+       }
       xTaskNotifyGive( nextFileHandle );
-    //  Serial.println("RotCount");
     }
-   last_interrupt_time = interrupt_time;
-  }
+  last_interrupt_time = interrupt_time;
+}
   
+
+
 void setup()
 {
-  pinMode(15, INPUT_PULLUP);
-  pinMode(2, INPUT_PULLUP);
-  pinMode(4, INPUT_PULLUP);
-  pinMode(12, INPUT_PULLUP);
-  pinMode(13, INPUT_PULLUP);
+     pinMode(15, INPUT_PULLUP);
+     pinMode(2, INPUT_PULLUP);
+     pinMode(4, INPUT_PULLUP);
+     pinMode(12, INPUT_PULLUP);
+     pinMode(13, INPUT_PULLUP); 
      pinMode(34,INPUT);
      pinMode(35,INPUT); 
      Serial.begin(115200);
-       if(imgBuffer = (uint16_t(*)[320][PixelCount]) calloc(PixelCount*Div*BufferNum,sizeof(uint16_t)))
-    Serial.println("Alloc memory OK");
+     if(imgBuffer = (uint16_t(*)[320][PixelCount]) calloc(PixelCount*Div*BufferNum,sizeof(uint16_t)))
+        Serial.println("Alloc IMG Memory OK");
      if(!SD_MMC.begin("/sdcard",true)){
         Serial.println("Card Mount Failed");
     }   
-    // WiFi.mode(WIFI_AP);
-    // WiFi.softAP("bbPOV-P");
-    //  MDNS.begin("bbPOV");
-     // MDNS.addService("bbPOV", "tcp", 80);
-         WiFiMulti.addAP("Hollyshit_A", "00197633");
+    /*
+     WiFi.mode(WIFI_AP);
+     WiFi.softAP("bbPOV-P");
+      MDNS.begin("bbPOV");
+      MDNS.addService("bbPOV", "tcp", 80);*/
+      WiFi.begin("Hollyshit_A", "00197633");
 
-    Serial.println();
-    Serial.println();
-    Serial.print("Waiting for WiFi... ");
-
-    while(WiFiMulti.run() != WL_CONNECTED) {
-        Serial.print(".");
+    while (WiFi.status() != WL_CONNECTED) {
         delay(500);
+        Serial.print(".");
     }
 
     Serial.println("");
     Serial.println("WiFi connected");
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
-    
+      server.on("/", []() {
+      server.send_P(200, "text/html", index_html);
+    });
+  server.on("/avaliableMedia", []() {
+      String json;
+      serializeJson(doc, json);
+      server.send(200, "text/plain", json);
+    });
+  server.on("/changeMedia",[]() {
+      int mediaID = server.arg(0).toInt();
+      Serial.println(mediaID);
+      dir=SD_MMC.open("/bbPOV-P/"+avaliableMedia[mediaID].as<String>());
+      server.send(200, "text/plain", "OK");
+    });
+    ElegantOTA.begin(&server);      
+    server.begin();   
+    Serial.println("HTTP server started");
+    tcpStream.begin(22333); //服务器启动监听端口号22333
+    tcpStream.setNoDelay(true);
     strip.Begin();
     strip.Show();
     strip2.Begin(32,25,33,26);
     strip2.Show();
-    //stripA.begin(); // Initialize pins for output
-    //stripA.show();  // Turn all LEDs off ASAP
-//    FastLED.addLeds<APA102,23,18,BGR,DATA_RATE_MHZ(30)>(leds, PixelCount);
-  //  FastLED.show();
-    
-    root=SD_MMC.open("/bbPOV-P");
-    dir=root.openNextFile();  
-    while(!dir.isDirectory()){
-      dir=root.openNextFile();
-      if(!dir)
-        break;
-    }
-    Serial.println(dir.name());
     long lTime;
+
+    root=SD_MMC.open("/bbPOV-P"); 
+    while(true){
+      File entry = root.openNextFile();
+      if(!entry) break;
+      if(entry.isDirectory()){
+          avaliableMedia.add(String(entry.name()).substring(9));
+        }
+      }
+    dir=SD_MMC.open("/bbPOV-P/"+avaliableMedia[0].as<String>());
   if (jpeg.open("", myOpen, myClose, myRead, mySeek, JPEGDraw))
   {
     lTime = micros();
@@ -126,118 +149,87 @@ void setup()
     }
     jpeg.close();
   }
-  Serial.printf("After Pixel = 0x%02x\n", imgBuffer[0][160][50]);
-  Serial.printf("\n\navailable heap in main %i\n", ESP.getFreeHeap());
-  Serial.printf("biggest free block: %i\n\”", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
   bufferRot=0;
+  attachInterrupt(35, RotCount, FALLING );
 
-  xTaskCreatePinnedToCore(
+      xTaskCreatePinnedToCore(
     nextFile
     ,  "nextFile"
     ,  5000  // Stack size
     ,  NULL
-    ,  2  // Priority
+    ,  4  // Priority
     ,  &nextFileHandle 
-    ,  0);
-  hallHit.attach(0.033,RotCountCommon);     
-    xTaskCreatePinnedToCore(
+    ,  0); 
+        xTaskCreatePinnedToCore(
     webloop
     ,  "webloop"
     ,  5000  // Stack size
     ,  NULL
     ,  2 // Priority
     ,  NULL 
-    ,  0);   
-
-    xTaskCreatePinnedToCore(
-    ledloop
-    ,  "ledloop"
-    ,  1000  // Stack size
-    ,  NULL
-    ,  2 // Priority
-    ,  NULL 
-    ,  1);
-    Serial.println("Setup Done");     
+    ,  0); 
+    hallHit.attach(0.04,RotCount);  
+    Serial.println("Setup Done");
+    vTaskPrioritySet(NULL, 5);              
 }
 void loop() { 
-    //AsyncElegantOTA.loop(); 
-}
-void ledloop(void *pvParameters)
+  if(stateDiv == 1 && micros() - timeOld > (rotTime / Div) * (numDiv)){
+        stateDiv = 0;
+      }
+      if(stateDiv == 0 && micros() - timeOld < (rotTime / Div) * (numDiv + 1 )){
+        stateDiv = 1;
+      //  long donetime=micros();
+        int showNumDiv = numDiv;
+        if(showNumDiv<Div/LedStripCount){
+              for(int i = 0; i < PixelCount; i++){
+                uint16_t color = imgBuffer[bufferRot][showNumDiv][i];
+                uint16_t color2 = imgBuffer[bufferRot][showNumDiv+Div/LedStripCount][i];
+                strip.SetPixelColor(i, RgbColor(uint8_t((color & 0xF800)>>8),uint8_t((color & 0x07C0)>>3),uint8_t((color & 0x001F)<<3)));
+                strip2.SetPixelColor(i, RgbColor(uint8_t((color2 & 0xF800)>>8),uint8_t((color2 & 0x07C0)>>3),uint8_t((color2 & 0x001F)<<3)));
+              }
+        }
+        else{
+          for(int i = 0; i < PixelCount; i++){
+                uint16_t color = imgBuffer[bufferRot][showNumDiv][i];
+                uint16_t color2 = imgBuffer[bufferRot][showNumDiv-Div/LedStripCount][i];
+                strip.SetPixelColor(i, RgbColor(uint8_t((color & 0xF800)>>8),uint8_t((color & 0x07C0)>>3),uint8_t((color & 0x001F)<<3)));
+                strip2.SetPixelColor(i, RgbColor(uint8_t((color2 & 0xF800)>>8),uint8_t((color2 & 0x07C0)>>3),uint8_t((color2 & 0x001F)<<3)));
+              }
+          }
+              strip.Show();  
+              strip2.Show();  
+              
+        numDiv++;
+        if(numDiv == (Div / LedStripCount)){
+          bufferRot++;
+          if(bufferRot>=BufferNum-1) bufferRot=0;
+          xTaskNotifyGive( nextFileHandle );
+        }
+        if(numDiv >= Div) numDiv=0;    
+        
+        /*
+        if(stateDiv == 0 ){
+          
+          strip.ClearTo(black);
+          strip.Show();
+          strip2.ClearTo(black);
+          strip2.Show();
+          }*/
+  }
+} 
+
+void webloop(void *pvParameters)
 {
   for (;;)
   {
     TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
     TIMERG0.wdt_feed=1;
     TIMERG0.wdt_wprotect=0;
-        if(stateDiv == 1 && micros() - timeOld > (rotTime / (Div/LedStripCount)) * (numDiv)){
-        stateDiv = 0;
-      }
-      if(stateDiv == 0 && micros() - timeOld < (rotTime / (Div/LedStripCount)) * (numDiv + 1 )){
-        stateDiv = 1;
-       
-      //  long donetime=micros();
-       // switch(Hall){
-        //    case 0:
-              strip.ClearTo(black);
-              strip2.ClearTo(black);
-             // long nowtime=micros();
-              for(int i = 0; i < PixelCount; i++){
-                uint16_t color = imgBuffer[bufferRot][numDiv][i];
-                uint16_t color2 = imgBuffer[bufferRot][numDiv+Div/LedStripCount][i];
-                strip.SetPixelColor(i, RgbColor(uint8_t((color & 0xF800)>>8),uint8_t((color & 0x07C0)>>3),uint8_t((color & 0x001F)<<3)));
-                strip2.SetPixelColor(i, RgbColor(uint8_t((color2 & 0xF800)>>8),uint8_t((color2 & 0x07C0)>>3),uint8_t((color2 & 0x001F)<<3)));
-              }
-             // Serial.printf("FUcking setpixel tiime:%d",int(micros()-nowtime));
-              //  FastLED.show(); 
-            //  long stripshowtime=micros();
-              strip.Show();
-              strip2.Show();  
-            //  stripshowtime=micros()-stripshowtime;
-             // Serial.printf("FUcking stripshow tiime:%d",int(stripshowtime));  
-              //  stripA.show();
-             // break;
-              /*
-            case 1:
-              strip.ClearTo(black);
-              strip2.ClearTo(black);
-              for(int i = 0; i < PixelCount; i++){
-               strip2.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv][i] & 0x001F)<<3)));
-               strip.SetPixelColor(i, RgbColor(uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0xF800)>>8),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x07C0)>>3),uint8_t((imgBuffer[numDiv+Div/LedStripCount][i] & 0x001F)<<3)));
-              }
-              strip2.Show();  
-              strip.Show();  
-              break;
-          }  
-              */
-        numDiv++;
-        if(numDiv >= (Div / LedStripCount)) numDiv = 0;
-       // donetime=micros()-donetime;
-        //Serial.printf("FUcking done tiime:%d",int(donetime));
-        }
-        if(stateDiv == 0 ){
-          // Serial.println("Fuckup");
-          strip.ClearTo(black);
-          strip.Show();
-          strip2.ClearTo(black);
-          strip2.Show();
-          }
+    server.handleClient();
   }
-} 
-
-void webloop(void *pvParameters)
-{
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send(200, "text/plain", "Hi! I am bbPOV-P.");
-    });
-    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
-    
-    server.serveStatic("/", SD_MMC, "/");
-    server.onFileUpload(handleUpload);
-    server.begin(); 
-    Serial.println("HTTP server started");
-    vTaskDelete(NULL);
 }
 
+ 
 void * myOpen(const char *filename, int32_t *size) {
  // Serial.println("Open");
   myfile = dir.openNextFile();
@@ -271,7 +263,8 @@ int JPEGDraw(JPEGDRAW *pDraw) {
     memcpy(&imgBuffer[sdbufferRot][pDraw->y][pDraw->x],pDraw->pPixels,sizeof(uint16_t)*pixels);
    // Serial.println(ESP.getFreeHeap());
   return 1;
-}
+}  
+
 
 void nextFile(void *pvParameters){
   for (;;)
@@ -279,35 +272,49 @@ void nextFile(void *pvParameters){
   TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
   TIMERG0.wdt_feed=1;
   TIMERG0.wdt_wprotect=0;
-  ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-  //long lTime=micros();
-    if (jpeg.open("", myOpen, myClose, myRead, mySeek, JPEGDraw))
-  {
-
-    if (jpeg.decode(0,0,0))
+  
+  client = tcpStream.available(); //尝试建立客户对象
+ // client.setNoDelay(true);
+    if (client) //如果当前客户可用
     {
-     // lTime = micros() - lTime;
-     // Serial.printf("Successfully decoded image in %d us\n", (int)lTime);
+        Serial.println("[Client connected]");
+        while (client.connected()) //如果客户端处于连接状态
+        {
+          TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
+          TIMERG0.wdt_feed=1;
+          TIMERG0.wdt_wprotect=0;
+          ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+            if (client.available()) //如果有可读数据
+            {
+                String buff = client.readStringUntil('\r');
+                int len = buff.toInt();
+                client.readBytes(streamBuffer,len);                              
+                  if (jpeg.openRAM(streamBuffer, len, JPEGDraw)) {
+                 //  Serial.printf("Image size: %d x %d, orientation: %d, bpp: %d\n", jpeg.getWidth(),
+                   // jpeg.getHeight(), jpeg.getOrientation(), jpeg.getBpp());
+                      if (jpeg.decode(0,0,0)) { // full sized decode
+                      }
+                      jpeg.close();
+                    }
+            }
+        }
+      //  client.stop(); //结束当前连接:
+      //  Serial.println("[Client disconnected]");
     }
-    jpeg.close();
+    else{
+      ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+ //   Serial.println("File");
+    //long lTime=micros();
+      if (jpeg.open("", myOpen, myClose, myRead, mySeek, JPEGDraw))
+    {
+  
+      if (jpeg.decode(0,0,0))
+      {
+       // lTime = micros() - lTime;
+       // Serial.printf("Successfully decoded image in %d us\n", (int)lTime);
+      }
+      jpeg.close();
+    }
   }
 }
-}
-
-void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
-  if(!index){
-    Serial.println((String)"UploadStart: " + filename);
-    // open the file on first call and store the file handle in the request object
-    request->_tempFile = SD_MMC.open("/bbPOV-P/Stream/"+filename, "w");
-  }
-  if(len) {
-    // stream the incoming chunk to the opened file
-    request->_tempFile.write(data,len);
-  }
-  if(final){
-    Serial.println((String)"UploadEnd: " + filename + ",size: " + index+len);
-    // close the file handle as the upload is now done
-    request->_tempFile.close();
-    request->send(200);
-  }
 }

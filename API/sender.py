@@ -19,7 +19,7 @@ Div = 320 #1圈分割数
 Bright = 50 #輝度
 Led0Bright = 15 #中心LEDの輝度 [%]
 last_time = time.time()
-MAX_FPS=15
+MAX_FPS=38
 MIN_FRAME_TIME=1/MAX_FPS
 
 #Global
@@ -56,7 +56,7 @@ def polarConv(imgOrgin):
          polar_image[:,i,2] = polar_image[:,i,2] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100 
         #polar_image[:,i,2] = hsv[:,i,2] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100
     #cv2.imwrite(outputName+'.jpg',polar_image,[int(cv2.IMWRITE_JPEG_OPTIMIZE), True])
-    ret,img_encode = cv2.imencode('.jpg',polar_image,[int(cv2.IMWRITE_JPEG_QUALITY), 90]+[int(cv2.IMWRITE_JPEG_OPTIMIZE), True])
+    ret,img_encode = cv2.imencode('.jpg',polar_image,[int(cv2.IMWRITE_JPEG_QUALITY), 50]+[int(cv2.IMWRITE_JPEG_OPTIMIZE), True])
     data = np.array(img_encode)
     stringData = data.tobytes()
     print(str(len(stringData)))
@@ -69,7 +69,8 @@ def capture():
     global posY2
     global last_time
     while running:
-            #捕捉屏幕
+            #if(s.recv(1).decode("utf-8") == "N"):
+                #捕捉屏幕
             start = time.time()
             frame = mss().grab({'top': posY, 'left': posX, 'width': posX2-posX, 'height': posY2-posY})
             polarConv(frame)          

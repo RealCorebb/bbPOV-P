@@ -44,6 +44,7 @@ DynamicJsonDocument doc(4096);
 JsonArray avaliableMedia = doc.to<JsonArray>();
 int displayMode = 0;
 WiFiServer tcpStream; //声明服务器对象
+WiFiClient client;
 
 RgbColor black(0);
 
@@ -60,7 +61,7 @@ static unsigned long last_interrupt_time = 0;
       rotTime = timeNow - timeOld;
       timeOld = timeNow;
       xTaskNotifyGive( nextFileHandle );
-  }
+    }
   last_interrupt_time = interrupt_time;
 }
   
@@ -68,11 +69,6 @@ static unsigned long last_interrupt_time = 0;
 
 void setup()
 {
-     pinMode(15, INPUT_PULLUP);
-     pinMode(2, INPUT_PULLUP);
-     pinMode(4, INPUT_PULLUP);
-     pinMode(12, INPUT_PULLUP);
-     pinMode(13, INPUT_PULLUP); 
      pinMode(34,INPUT);
      pinMode(35,INPUT); 
      Serial.begin(115200);
@@ -157,14 +153,6 @@ void setup()
     ,  5000  // Stack size
     ,  NULL
     ,  2 // Priority
-    ,  NULL 
-    ,  0); 
-        xTaskCreatePinnedToCore(
-    handleStream
-    ,  "handleStream"
-    ,  5000  // Stack size
-    ,  NULL
-    ,  4  // Priority
     ,  NULL 
     ,  0); 
     Serial.println("Setup Done");
@@ -270,8 +258,38 @@ void nextFile(void *pvParameters){
   TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
   TIMERG0.wdt_feed=1;
   TIMERG0.wdt_wprotect=0;
-  if(displayMode == 0){
-    ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+  
+  client = tcpStream.available(); //尝试建立客户对象
+ // client.setNoDelay(true);
+    if (client) //如果当前客户可用
+    {
+        Serial.println("[Client connected]");
+        while (client.connected()) //如果客户端处于连接状态
+        {
+          TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
+          TIMERG0.wdt_feed=1;
+          TIMERG0.wdt_wprotect=0;
+          ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+            if (client.available()) //如果有可读数据
+            {
+                String buff = client.readStringUntil('\r');
+                int len = buff.toInt();
+                client.readBytes(streamBuffer,len);                              
+                  if (jpeg.openRAM(streamBuffer, len, JPEGDraw)) {
+                 //  Serial.printf("Image size: %d x %d, orientation: %d, bpp: %d\n", jpeg.getWidth(),
+                   // jpeg.getHeight(), jpeg.getOrientation(), jpeg.getBpp());
+                      if (jpeg.decode(0,0,0)) { // full sized decode
+                      }
+                      jpeg.close();
+                    }
+            }
+        }
+      //  client.stop(); //结束当前连接:
+      //  Serial.println("[Client disconnected]");
+    }
+    else{
+      ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+ //   Serial.println("File");
     //long lTime=micros();
       if (jpeg.open("", myOpen, myClose, myRead, mySeek, JPEGDraw))
     {
@@ -284,45 +302,5 @@ void nextFile(void *pvParameters){
       jpeg.close();
     }
   }
-}
-}
-
-void handleStream(void *pvParameters){
-  for (;;)
-  {
-  TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
-  TIMERG0.wdt_feed=1;
-  TIMERG0.wdt_wprotect=0;
-        WiFiClient client = tcpStream.available(); //尝试建立客户对象
-    if (client) //如果当前客户可用
-    {
-        displayMode = 1;
-        Serial.println("[Client connected]");
-        while (client.connected()) //如果客户端处于连接状态
-        {
-          TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
-          TIMERG0.wdt_feed=1;
-          TIMERG0.wdt_wprotect=0;
-            if (client.available()) //如果有可读数据
-            {
-                String buff = client.readStringUntil('\r');
-                int len = buff.toInt();
-                client.readBytes(streamBuffer,len);                    
-                if(streamBuffer[len-2]==0xFF && streamBuffer[len-1]==0xD9){   //JPG结尾
-                  
-                  if (jpeg.openRAM(streamBuffer, len, JPEGDraw)) {
-                    //Serial.printf("Image size: %d x %d, orientation: %d, bpp: %d\n", jpeg.getWidth(),
-                    //jpeg.getHeight(), jpeg.getOrientation(), jpeg.getBpp());
-                      if (jpeg.decode(0,0,0)) { // full sized decode
-                      }
-                      jpeg.close();
-                    }
-                  }
-            }
-        }
-      displayMode = 0;
-      //  client.stop(); //结束当前连接:
-      //  Serial.println("[Client disconnected]");
-    }
 }
 }
