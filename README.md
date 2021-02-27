@@ -5,9 +5,9 @@ A new milestone?
 ![image](https://github.com/RealCorebb/bbPOV-P/blob/main/IMG/logo.jpg?raw=true)  
 新的自我突破
 # 目录结构：
-**API** 包含取模软件、串流软件，都在NewConvert目录下，其它为一些早期的版本
-**Arduino--HardwareTest** 开发过程中用来测试LED是否正常、硬件性能的一些硬件测试的软件，最终的主程序中用不到
-**Arduino--bbPOV-P** 主程序
+**API** 包含取模软件、串流软件，都在NewConvert目录下，其它为一些早期的版本  
+**Arduino--HardwareTest** 开发过程中用来测试LED是否正常、硬件性能的一些硬件测试的软件，最终的主程序中用不到  
+**Arduino--bbPOV-P** 主程序  
 # 依赖库 
 除了[NeoPixelBus](https://github.com/RealCorebb/NeoPixelBus "NeoPixelBus")需要用我修改过的版本以外，其它的一般找对应名字就能找到
 # 备选LED芯片
