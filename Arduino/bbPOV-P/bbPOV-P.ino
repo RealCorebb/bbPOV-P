@@ -20,8 +20,6 @@
 #define OFFSET_34 0
 #define OFFSET_35 0
 
-int Frame = 0;
-byte Hall = 0;  //到达顶端的霍尔传感器代号
 uint16_t (*imgBuffer)[320][PixelCount];
 uint8_t streamBuffer[MaxStreamBuffer];
 
@@ -43,9 +41,10 @@ NeoPixelBus<DotStarBgrFeature, DotStarSpiMethod> strip(PixelCount);
 DynamicJsonDocument doc(4096);
 JsonArray avaliableMedia = doc.to<JsonArray>();
 int displayMode = 0;
+int curMedia = 0;
 WiFiServer tcpStream; //声明服务器对象
 WiFiClient client;
-
+bool autoNext = true;
 RgbColor black(0);
 
 
@@ -107,6 +106,11 @@ void setup()
       dir=SD_MMC.open("/bbPOV-P/"+avaliableMedia[mediaID].as<String>());
       server.send(200, "text/plain", "OK");
     });
+  server.on("/changeAutoNext",[]() {
+      autoNext = !autoNext;
+      if(autoNext) server.send(200, "text/plain", "True"); 
+      else server.send(200, "text/plain", "False"); 
+  });  
     ElegantOTA.begin(&server);      
     server.begin();   
     Serial.println("HTTP server started");
@@ -220,7 +224,12 @@ void * myOpen(const char *filename, int32_t *size) {
  // Serial.println("Open");
   myfile = dir.openNextFile();
   if(!myfile){
-        dir.rewindDirectory();
+        if(autoNext){
+        curMedia++;
+        if(curMedia>=avaliableMedia.size()) curMedia=0;
+        dir=SD_MMC.open("/bbPOV-P/"+avaliableMedia[curMedia].as<String>());
+        }
+        else dir.rewindDirectory();
         myfile = dir.openNextFile();
       }
 // Serial.println(myfile.name());

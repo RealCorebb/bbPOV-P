@@ -1,6 +1,5 @@
 #include <Ticker.h>
 Ticker hallHit;
-
 #include <WiFi.h>
 #include <AsyncTCP.h>
 #include <WebServer.h>
@@ -23,8 +22,6 @@ Ticker hallHit;
 #define OFFSET_34 0
 #define OFFSET_35 0
 
-int Frame = 0;
-byte Hall = 0;  //到达顶端的霍尔传感器代号
 uint16_t (*imgBuffer)[320][PixelCount];
 uint8_t streamBuffer[MaxStreamBuffer];
 
@@ -46,9 +43,10 @@ NeoPixelBus<DotStarBgrFeature, DotStarSpiMethod> strip(PixelCount);
 DynamicJsonDocument doc(4096);
 JsonArray avaliableMedia = doc.to<JsonArray>();
 int displayMode = 0;
+int curMedia = 0;
 WiFiServer tcpStream; //声明服务器对象
 WiFiClient client;
-
+bool autoNext = true;
 RgbColor black(0);
 
 
@@ -63,10 +61,6 @@ static unsigned long last_interrupt_time = 0;
       timeNow = micros();
       rotTime = timeNow - timeOld;
       timeOld = timeNow;
-      if (client) //如果当前客户可用
-      {
-        client.print("N");
-       }
       xTaskNotifyGive( nextFileHandle );
     }
   last_interrupt_time = interrupt_time;
@@ -76,11 +70,6 @@ static unsigned long last_interrupt_time = 0;
 
 void setup()
 {
-     pinMode(15, INPUT_PULLUP);
-     pinMode(2, INPUT_PULLUP);
-     pinMode(4, INPUT_PULLUP);
-     pinMode(12, INPUT_PULLUP);
-     pinMode(13, INPUT_PULLUP); 
      pinMode(34,INPUT);
      pinMode(35,INPUT); 
      Serial.begin(115200);
@@ -119,11 +108,15 @@ void setup()
       dir=SD_MMC.open("/bbPOV-P/"+avaliableMedia[mediaID].as<String>());
       server.send(200, "text/plain", "OK");
     });
+  server.on("/changeAutoNext",[]() {
+      autoNext = !autoNext;
+      if(autoNext) server.send(200, "text/plain", "True"); 
+      else server.send(200, "text/plain", "False"); 
+  });  
     ElegantOTA.begin(&server);      
     server.begin();   
     Serial.println("HTTP server started");
     tcpStream.begin(22333); //服务器启动监听端口号22333
-    tcpStream.setNoDelay(true);
     strip.Begin();
     strip.Show();
     strip2.Begin(32,25,33,26);
@@ -150,6 +143,7 @@ void setup()
     jpeg.close();
   }
   bufferRot=0;
+  hallHit.attach(0.04,RotCount);  
   attachInterrupt(35, RotCount, FALLING );
 
       xTaskCreatePinnedToCore(
@@ -168,7 +162,6 @@ void setup()
     ,  2 // Priority
     ,  NULL 
     ,  0); 
-    hallHit.attach(0.04,RotCount);  
     Serial.println("Setup Done");
     vTaskPrioritySet(NULL, 5);              
 }
@@ -231,13 +224,18 @@ void webloop(void *pvParameters)
 
  
 void * myOpen(const char *filename, int32_t *size) {
- // Serial.println("Open");
+  Serial.print("Open:");
   myfile = dir.openNextFile();
   if(!myfile){
-        dir.rewindDirectory();
+        if(autoNext){
+        curMedia++;
+        if(curMedia>=avaliableMedia.size()) curMedia=0;
+        dir=SD_MMC.open("/bbPOV-P/"+avaliableMedia[curMedia].as<String>());
+        }
+        else dir.rewindDirectory();
         myfile = dir.openNextFile();
       }
-// Serial.println(myfile.name());
+ Serial.println(myfile.name());
   *size = myfile.size();
   return &myfile;
 }
@@ -311,7 +309,7 @@ void nextFile(void *pvParameters){
       if (jpeg.decode(0,0,0))
       {
        // lTime = micros() - lTime;
-       // Serial.printf("Successfully decoded image in %d us\n", (int)lTime);
+        Serial.println("Successfully decoded ");
       }
       jpeg.close();
     }

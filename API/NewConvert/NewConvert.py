@@ -54,7 +54,7 @@ def polarConv(imgOrgin,outputName):
         #polar_image[:,i,2] = hsv[:,i,2] * ((100 - Led0Bright) / NUMPIXELS * i + Led0Bright) / 100 * Bright /100
     if(gammaCorrection):
         polar_image = cv2.LUT(polar_image, lut)
-    cv2.imwrite(outputName+'.jpg',polar_image,[int(cv2.IMWRITE_JPEG_OPTIMIZE), True])
+    cv2.imwrite(outputName+'.jpg',polar_image,[int(cv2.IMWRITE_JPEG_QUALITY), 100]+[int(cv2.IMWRITE_JPEG_OPTIMIZE), True])
 frameNum = 0
 def start_convert():
     global frameNum
