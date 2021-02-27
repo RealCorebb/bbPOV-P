@@ -1,5 +1,6 @@
 # bbPOV-P
 A new milestone?  
+PCB、更详细的READEME请等待更新，先去吃个饭哈~！
 ![image](https://github.com/RealCorebb/bbPOV-V3/blob/main/IMG/logo.jpg)  
 
 新的自我突破
