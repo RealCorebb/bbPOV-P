@@ -1,6 +1,6 @@
 # bbPOV-P  [English](https://github.com/RealCorebb/bbPOV-P/blob/main/README_EN.md "English")
 A new milestone?  
-#⭐ 100 Stars!!! Thank You!!!
+# ⭐ 100 Stars!!! Thank You!!!
 
 🔗[PCB工程文件地址](https://oshwhub.com/Corebb/bbpov-mcu_copy_copy_copy "PCB工程文件地址")  
 😄[3D模型、更详细的教程](https://www.afdian.net/@kuruibb "3D模型、更详细的教程")  
