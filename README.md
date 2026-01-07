@@ -4,7 +4,9 @@ A new milestone?
 
 🔗[PCB工程文件地址](https://oshwhub.com/Corebb/bbpov-mcu_copy_copy_copy "PCB工程文件地址")  
 😄[3D模型、更详细的教程](https://www.afdian.com/@kuruibb "3D模型、更详细的教程")  
-🐧QQ群（仅供交流）：647186542  
+🧵[Threads](https://www.threads.net/@coreoobb "@coreoobb") @coreoobb  
+🐧QQ 群（仅供交流，人满请加Discord）：647186542  
+😈Discord 频道：[加入](https://discord.gg/gvbcCtdQrk "加入")   
 ▶️视频(Video):[Youtube](https://www.youtube.com/watch?v=HpYd48YgSek&t=5s "Youtube")[ Bilibili](https://www.bilibili.com/video/BV1Wy4y1a7t6 " Bilibili")  
 # 禁止搬运到Gitee  
 ![image](https://github.com/RealCorebb/bbPOV-P/blob/main/IMG/logo.jpg?raw=true)
